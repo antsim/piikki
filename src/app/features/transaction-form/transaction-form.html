@@ -1,0 +1,124 @@
+<dialog #dialog class="sheet" (close)="onDialogClose()" (click)="onBackdropClick($event)">
+  <form class="sheet__body" (submit)="onSubmit($event)">
+    <header class="sheet__header">
+      <h2 class="sheet__title">{{ editing() ? 'Edit transaction' : 'New transaction' }}</h2>
+      <button type="button" class="sheet__close" (click)="close()" aria-label="Close">✕</button>
+    </header>
+
+    <div class="field">
+      <label class="field-label" for="amount">Amount</label>
+      <div class="amount">
+        <input
+          id="amount"
+          class="amount__input numeric"
+          inputmode="decimal"
+          autocomplete="off"
+          placeholder="0,00"
+          autofocus
+          [value]="amountText()"
+          (input)="amountText.set(readValue($event))" />
+        <span class="amount__currency">{{ settings().currency }}</span>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="description">Place</label>
+      <input
+        id="description"
+        class="text-input"
+        list="known-places"
+        autocomplete="off"
+        placeholder="K-Market, rent, restaurant…"
+        [value]="description()"
+        (input)="description.set(readValue($event))" />
+      <datalist id="known-places">
+        @for (place of knownDescriptions(); track place) {
+          <option [value]="place"></option>
+        }
+      </datalist>
+    </div>
+
+    <div class="field">
+      <span class="field-label">Type</span>
+      <div class="segmented segmented--wrap">
+        @for (category of categories(); track category.id) {
+          <button
+            type="button"
+            class="segmented__option"
+            [attr.aria-pressed]="categoryId() === category.id"
+            (click)="categoryId.set(category.id)">
+            {{ category.label }}
+          </button>
+        }
+      </div>
+    </div>
+
+    <div class="field">
+      <span class="field-label">{{ isSettlement() ? 'Who sent the money?' : 'Who paid?' }}</span>
+      <div class="segmented">
+        <button
+          type="button"
+          class="segmented__option"
+          [attr.aria-pressed]="payer() === 'me'"
+          (click)="payer.set('me')">
+          {{ settings().myName }}
+        </button>
+        <button
+          type="button"
+          class="segmented__option"
+          [attr.aria-pressed]="payer() === 'partner'"
+          (click)="payer.set('partner')">
+          {{ settings().partnerName }}
+        </button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label class="field-label" for="date">Date</label>
+      <input
+        id="date"
+        class="text-input numeric"
+        type="date"
+        [value]="date()"
+        (input)="date.set(readValue($event))" />
+    </div>
+
+    <section
+      class="preview"
+      [class.preview--positive]="deltaCents() > 0"
+      [class.preview--negative]="deltaCents() < 0">
+      <div class="preview__row">
+        <span>Share</span>
+        <span class="numeric">{{ money.percent(percent()) }}</span>
+      </div>
+      <div class="preview__row">
+        <span>Balance change</span>
+        <span class="numeric preview__delta">{{ money.signed(deltaCents()) }}</span>
+      </div>
+      <div class="preview__row preview__row--total">
+        <span>Balance after</span>
+        <span class="numeric">{{ money.signed(resultingBalanceCents()) }}</span>
+      </div>
+      <p class="preview__note">
+        @if (deltaCents() > 0) {
+          {{ settings().partnerName }} owes you {{ money.absolute(deltaCents()) }} more.
+        } @else if (deltaCents() < 0) {
+          You owe {{ settings().partnerName }} {{ money.absolute(deltaCents()) }} more.
+        } @else {
+          Enter an amount to see how it moves the balance.
+        }
+      </p>
+    </section>
+
+    <footer class="sheet__footer">
+      @if (editing()) {
+        <button type="button" class="btn btn--danger" (click)="remove()">Delete</button>
+      }
+      <span class="sheet__spacer"></span>
+      <button type="button" class="btn btn--ghost" (click)="close()">Cancel</button>
+      <button type="submit" class="btn btn--primary" [disabled]="!valid() || saving()">
+        {{ editing() ? 'Save' : 'Add' }}
+      </button>
+    </footer>
+  </form>
+</dialog>
