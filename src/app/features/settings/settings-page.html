@@ -3,6 +3,26 @@
 <h1 class="page-title">Settings</h1>
 
 <section class="card section">
+  <h2 class="section__title">Sync</h2>
+  @if (store.backend === 'cloud') {
+    <p class="section__hint">
+      <span class="dot dot--cloud"></span>
+      Cloud sync via Supabase — changes appear on every device.
+    </p>
+  } @else {
+    <p class="section__hint">
+      <span class="dot dot--local"></span>
+      This device only. Data lives in this browser; export a backup to move it or to keep it
+      safe.
+    </p>
+    <p class="section__hint">
+      To sync between devices, add a <code>config.json</code> pointing at a Supabase project —
+      see the README.
+    </p>
+  }
+</section>
+
+<section class="card section">
   <h2 class="section__title">People</h2>
   <p class="section__hint">Names are only used for labels in this app.</p>
 
@@ -79,8 +99,12 @@
 <section class="card section">
   <h2 class="section__title">Backup</h2>
   <p class="section__hint">
-    Everything is stored in this browser only. Export a JSON file to keep a copy or to move the
-    ledger to another device.
+    @if (store.backend === 'cloud') {
+      A JSON export is still worth keeping as a point-in-time copy, independent of the database.
+    } @else {
+      Everything is stored in this browser only. Export a JSON file to keep a copy or to move the
+      ledger to another device.
+    }
   </p>
 
   <p class="section__status">

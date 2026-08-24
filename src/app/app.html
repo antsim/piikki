@@ -27,6 +27,13 @@
     </p>
   }
 
+  @if (appConfig.error(); as error) {
+    <p class="banner banner--error">
+      config.json: {{ error }} Falling back to local storage.
+      <button type="button" class="banner__dismiss" (click)="appConfig.dismissError()">Dismiss</button>
+    </p>
+  }
+
   @if (store.error(); as error) {
     <p class="banner banner--error">
       {{ error }}
