@@ -53,8 +53,19 @@
       </div>
     </div>
 
+    @if (isOpeningBalance()) {
+      <p class="hint">
+        One-time setup: enter the balance from wherever you tracked this before, as of the date
+        below. Pick whichever the old tracker said — e.g. if it said {{ settings().partnerName }}
+        owed you money, choose {{ settings().myName }}, and the balance will start out showing
+        exactly that.
+      </p>
+    }
+
     <div class="field">
-      <span class="field-label">{{ isSettlement() ? 'Who sent the money?' : 'Who paid?' }}</span>
+      <span class="field-label">
+        {{ isOpeningBalance() ? 'Starting balance favors' : isSettlement() ? 'Who sent the money?' : 'Who paid?' }}
+      </span>
       <div class="segmented">
         <button
           type="button"
@@ -87,10 +98,12 @@
       class="preview"
       [class.preview--positive]="deltaCents() > 0"
       [class.preview--negative]="deltaCents() < 0">
-      <div class="preview__row">
-        <span>Share</span>
-        <span class="numeric">{{ money.percent(percent()) }}</span>
-      </div>
+      @if (!isOpeningBalance()) {
+        <div class="preview__row">
+          <span>Share</span>
+          <span class="numeric">{{ money.percent(percent()) }}</span>
+        </div>
+      }
       <div class="preview__row">
         <span>Balance change</span>
         <span class="numeric preview__delta">{{ money.signed(deltaCents()) }}</span>

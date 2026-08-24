@@ -13,7 +13,7 @@ import {
 import { todayIso } from '../../core/domain/dates';
 import { balanceDeltaCents, signedSharePercent } from '../../core/domain/ledger';
 import { centsToInputValue, parseAmountToCents } from '../../core/domain/money';
-import { SplitCategory } from '../../core/domain/split-category.model';
+import { OPENING_BALANCE_CATEGORY_ID, SplitCategory } from '../../core/domain/split-category.model';
 import { Payer, Transaction, TransactionDraft } from '../../core/domain/transaction.model';
 import { MoneyFormatter } from '../../core/format/money-formatter';
 import { LedgerStore } from '../../core/state/ledger-store';
@@ -44,7 +44,19 @@ export class TransactionForm {
 
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
 
-  protected readonly categories = this.store.selectableCategories;
+  /**
+   * The opening-balance chip disappears once it's been used — there should
+   * only ever be one such entry — except while editing that exact
+   * transaction, where it needs to stay selected.
+   */
+  protected readonly categories = computed(() => {
+    const all = this.store.selectableCategories();
+    const editingId = this.request().transaction?.categoryId;
+    if (!this.store.hasOpeningBalance() || editingId === OPENING_BALANCE_CATEGORY_ID) {
+      return all;
+    }
+    return all.filter((category) => category.id !== OPENING_BALANCE_CATEGORY_ID);
+  });
   protected readonly settings = this.store.settings;
   protected readonly knownDescriptions = this.store.knownDescriptions;
   protected readonly saving = signal(false);
@@ -57,6 +69,9 @@ export class TransactionForm {
 
   protected readonly editing = computed(() => this.request().transaction !== undefined);
   protected readonly isSettlement = computed(() => this.category()?.kind === 'settlement');
+  protected readonly isOpeningBalance = computed(
+    () => this.category()?.id === OPENING_BALANCE_CATEGORY_ID,
+  );
   protected readonly amountCents = computed(() => parseAmountToCents(this.amountText()) ?? 0);
   protected readonly valid = computed(() => this.amountCents() > 0 && !!this.category());
 
