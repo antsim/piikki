@@ -9,7 +9,7 @@ import {
 } from '../domain/ledger';
 import { DEFAULT_SETTINGS, LedgerSettings } from '../domain/settings.model';
 import { LedgerSnapshot } from '../domain/snapshot.model';
-import { SplitCategory } from '../domain/split-category.model';
+import { OPENING_BALANCE_CATEGORY_ID, SplitCategory } from '../domain/split-category.model';
 import { Transaction, TransactionDraft } from '../domain/transaction.model';
 import { LedgerStorage } from '../storage/ledger-storage';
 
@@ -69,6 +69,17 @@ export class LedgerStore {
   readonly categories = computed(() => this.settingsSignal().categories);
   readonly selectableCategories = computed(() =>
     this.categories().filter((category) => !category.archived),
+  );
+
+  /**
+   * True once an opening-balance entry exists. There should only ever be one
+   * — the form uses this to stop offering the chip after the first save,
+   * rather than hard-blocking a second one (deleting the first un-hides it).
+   */
+  readonly hasOpeningBalance = computed(() =>
+    this.transactionsSignal().some(
+      (transaction) => transaction.categoryId === OPENING_BALANCE_CATEGORY_ID,
+    ),
   );
 
   /** Every transaction, chronological, with its balance delta and running total. */

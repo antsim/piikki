@@ -38,6 +38,31 @@ Split rules are **snapshotted onto each transaction when it is saved**. Changing
 "Household" from 60 % to 55 % later affects new entries only; history never
 silently rewrites itself.
 
+## Moving from a spreadsheet: setting the starting balance
+
+A fresh install always starts at €0.00 — the balance is just the sum of every
+transaction, and there aren't any yet. To carry in whatever your old
+spreadsheet last said, add one transaction using the **Opening balance**
+category (add form → Type):
+
+1. Enter the amount.
+2. **Starting balance favors** — pick whichever the old tracker said. If it
+   said your partner owed you money, choose yourself; the live preview at the
+   bottom shows the resulting balance before you save, so you can check it
+   against the spreadsheet's number first.
+3. Set the date to the day the spreadsheet's number was as of — typically the
+   day before you start entering new transactions here.
+
+That's the whole migration: one transaction, then everything from here on
+works normally. The chip disappears from the Type list after you use it (there
+should only ever be one) and reappears if you delete that entry.
+
+Under the hood this reuses the exact same arithmetic as a settlement — "favors
+me" / "favors partner" maps onto the same `payer` field a real settlement
+uses — so there's no separate balance rule for this case, only different
+wording in the form (a settlement's "who sent the money?" doesn't make sense
+for a number carried in from elsewhere).
+
 ## Months
 
 There are no manual "carry over" rows. A month's opening balance is simply the

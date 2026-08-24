@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { RouterLink } from '@angular/router';
 import { dayLabel, monthLabel } from '../../core/domain/dates';
 import { LedgerEntry } from '../../core/domain/ledger';
+import { OPENING_BALANCE_CATEGORY_ID } from '../../core/domain/split-category.model';
 import { Transaction } from '../../core/domain/transaction.model';
 import { BackupService } from '../../core/backup/backup.service';
 import { MoneyFormatter } from '../../core/format/money-formatter';
@@ -80,7 +81,11 @@ export class LedgerPage {
   /** The "Household · paid by Wife · -40 %" line under each row. */
   protected meta(entry: LedgerEntry): string {
     const { myName, partnerName } = this.store.settings();
-    const { payer, split } = entry.transaction;
+    const { payer, split, categoryId } = entry.transaction;
+
+    if (categoryId === OPENING_BALANCE_CATEGORY_ID) {
+      return payer === 'me' ? `Carried in — favors ${myName}` : `Carried in — favors ${partnerName}`;
+    }
 
     if (split.kind === 'settlement') {
       return payer === 'me' ? `Payment to ${partnerName}` : `Payment from ${partnerName}`;

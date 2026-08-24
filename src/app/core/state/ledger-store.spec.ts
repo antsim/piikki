@@ -2,7 +2,7 @@ import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AuthStore } from '../auth/auth.store';
-import { SETTLEMENT_CATEGORY_ID } from '../domain/split-category.model';
+import { OPENING_BALANCE_CATEGORY_ID, SETTLEMENT_CATEGORY_ID } from '../domain/split-category.model';
 import { Transaction, TransactionDraft } from '../domain/transaction.model';
 import { InMemoryLedgerStorage } from '../storage/in-memory-ledger-storage';
 import { LedgerStorage } from '../storage/ledger-storage';
@@ -39,7 +39,38 @@ describe('LedgerStore', () => {
       'household',
       'shared',
       SETTLEMENT_CATEGORY_ID,
+      OPENING_BALANCE_CATEGORY_ID,
     ]);
+  });
+
+  it('sets an opening balance in the chosen direction, using the same math as a settlement', async () => {
+    expect(store.hasOpeningBalance()).toBe(false);
+
+    await store.addTransaction(
+      draft({
+        description: 'Opening balance',
+        amountCents: 14_250,
+        payer: 'me',
+        categoryId: OPENING_BALANCE_CATEGORY_ID,
+        split: { kind: 'settlement', myShare: 0 },
+      }),
+    );
+
+    expect(store.balanceCents()).toBe(14_250);
+    expect(store.hasOpeningBalance()).toBe(true);
+  });
+
+  it('moves the opening balance the other way when it favors the partner', async () => {
+    await store.addTransaction(
+      draft({
+        payer: 'partner',
+        categoryId: OPENING_BALANCE_CATEGORY_ID,
+        split: { kind: 'settlement', myShare: 0 },
+        amountCents: 8_000,
+      }),
+    );
+
+    expect(store.balanceCents()).toBe(-8_000);
   });
 
   it('adds a transaction and moves the balance', async () => {
@@ -75,6 +106,16 @@ describe('LedgerStore', () => {
     await store.restoreTransaction(saved);
     expect(store.balanceCents()).toBe(4_000);
     expect(store.transactions()).toHaveLength(1);
+  });
+
+  it('un-hides the opening-balance chip again if that entry is deleted', async () => {
+    const saved = await store.addTransaction(
+      draft({ categoryId: OPENING_BALANCE_CATEGORY_ID, split: { kind: 'settlement', myShare: 0 } }),
+    );
+    expect(store.hasOpeningBalance()).toBe(true);
+
+    await store.deleteTransaction(saved.id);
+    expect(store.hasOpeningBalance()).toBe(false);
   });
 
   it('rolls the optimistic update back when the write fails', async () => {

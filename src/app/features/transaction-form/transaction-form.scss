@@ -54,6 +54,16 @@
   flex-direction: column;
 }
 
+.hint {
+  margin: -4px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+}
+
 .amount {
   display: flex;
   align-items: baseline;
