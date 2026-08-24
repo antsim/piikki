@@ -1,0 +1,75 @@
+name: Deploy to GitHub Pages
+
+# Builds the Angular app and publishes it to GitHub Pages on every push to
+# main. Cloud mode is opt-in: if the SUPABASE_URL and SUPABASE_ANON_KEY
+# repository variables are set (Settings -> Secrets and variables -> Actions
+# -> Variables), the build writes them into public/config.json before
+# `ng build` runs, so Angular's asset pipeline picks it up automatically. If
+# they're not set, the build proceeds without a config.json and the deployed
+# app runs in local-only mode — same "missing file = local mode" rule the
+# app already follows everywhere else.
+#
+# These aren't secrets in the sensitive sense (see README's Cloud mode
+# section) — they ship in the client bundle regardless, which is why
+# repository *variables* are the right fit here rather than *secrets*.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Write cloud config (only if the repo variables are set)
+        if: vars.SUPABASE_URL != '' && vars.SUPABASE_ANON_KEY != ''
+        run: |
+          cat > public/config.json <<CONFIG
+          {
+            "supabaseUrl": "${{ vars.SUPABASE_URL }}",
+            "supabaseAnonKey": "${{ vars.SUPABASE_ANON_KEY }}"
+          }
+          CONFIG
+
+      # GitHub Pages serves a project site from /<repo-name>/, so every
+      # asset URL the build emits needs that prefix.
+      - run: npm run build -- --base-href /${{ github.event.repository.name }}/
+
+      # GitHub Pages has no server-side rewrite rules, so a deep link (e.g.
+      # reloading on /settings) 404s unless the 404 page IS the app — the
+      # standard SPA-on-Pages trick.
+      - name: SPA fallback (404 -> index)
+        run: cp dist/piikki/browser/index.html dist/piikki/browser/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/piikki/browser
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -214,21 +214,55 @@ npm run build      # production build -> dist/piikki/browser
 
 ## Hosting
 
-The build output is static files — any static host works, and the app is a good
-fit for hosting-level password protection (HTTP basic auth, Cloudflare Access,
-Netlify password protection), which is why there is no login inside the app.
+The build output is static files — any static host works.
+
+**On the deployed page being public:** the original plan was hosting-level
+password protection (HTTP basic auth, Cloudflare Access, Netlify password
+protection) because there was no login. Cloud mode has real login now (see
+above), which changed the calculus:
+
+- **Cloud mode** — the database requires a signed-in session; a public URL
+  just means a stranger can see the login screen, not your data. Hosting-level
+  password protection is still fine to add as an extra layer, but it's no
+  longer the thing standing between the internet and your ledger.
+- **Local mode** — there's no shared backend at all; every visitor gets their
+  own empty browser-local instance. A stranger finding the URL sees a blank
+  app, not your data, wherever they are.
+
+Either way, publishing a public URL is a reasonable default now. Add hosting-level
+protection on top if you'd still rather nobody unfamiliar even see the login
+screen.
+
+### GitHub Pages (automated)
+
+`.github/workflows/deploy-pages.yml` builds and deploys on every push to
+`main` — nothing to run by hand after the one-time setup:
+
+1. **Settings → Pages → Build and deployment → Source → GitHub Actions.**
+2. For cloud mode, add the two values from `public/config.json` as **Settings
+   → Secrets and variables → Actions → Variables** (the *Variables* tab, not
+   *Secrets* — see why above): `SUPABASE_URL` and `SUPABASE_ANON_KEY`. Skip
+   this for local mode; the workflow deploys in local mode automatically when
+   they're unset.
+3. Push to `main` (or run the workflow manually from the Actions tab). The
+   site publishes to `https://<your-username>.github.io/piikki/`.
+
+The workflow handles what a manual GitHub Pages deploy otherwise needs by
+hand: building with `--base-href /piikki/` (Pages serves a project site from
+a subpath) and copying `index.html` to `404.html` (Pages has no server-side
+rewrite rules, so a deep link — e.g. reloading on `/settings` — needs the
+404 page to *be* the app; Angular's router takes it from there).
+
+### Other static hosts
 
 Publish the contents of `dist/piikki/browser`. If you're using cloud mode,
 `public/config.json` must exist *before* `npm run build` runs so the asset
-pipeline picks it up (see the Cloud mode setup above) — nothing else to do
-per-host, it's just another static file.
+pipeline picks it up (see the Cloud mode setup above).
 
 Because it is a single-page app, the host must serve `index.html` for unknown
 paths:
 
 - **Netlify / Cloudflare Pages** — `public/_redirects` is included and handles it.
-- **GitHub Pages** — copy `index.html` to `404.html` after building, and build
-  with `ng build --base-href /<repo-name>/`.
 - **nginx** — `try_files $uri $uri/ /index.html;`
 
 ## Licence
