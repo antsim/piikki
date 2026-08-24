@@ -166,7 +166,14 @@ select {
   color: var(--accent-contrast);
   box-shadow: var(--shadow-md);
 
+  // .btn:hover:not(:disabled) above is also (class + 2 pseudo-classes) —
+  // same specificity as this rule — and its `background` would otherwise
+  // win on source order, stomping the gradient with --surface-subtle
+  // (which read as "turns white" once the brightness filter below hit it).
+  // Re-asserting the gradient here keeps this rule self-contained instead
+  // of relying on staying below .btn's own hover rule in the file.
   &:hover:not(:disabled) {
+    background: var(--accent-gradient);
     filter: brightness(1.06);
   }
 }
@@ -186,6 +193,13 @@ select {
   border-color: transparent;
   background: var(--negative-soft);
   color: var(--negative);
+
+  // Same specificity fix as .btn--primary above — without this, hovering a
+  // danger button also fell through to .btn's plain --surface-subtle hover.
+  &:hover:not(:disabled) {
+    background: var(--negative-soft);
+    filter: brightness(0.96);
+  }
 }
 
 .card {
