@@ -105,11 +105,11 @@ export class BalanceSummary {
 
   protected readonly headline = computed(() => {
     const balance = this.balance();
-    const { partnerName } = this.store.settings();
+    const { partnerName, myName } = this.store.settings();
     if (balance === 0) {
       return this.store.transactions().length ? 'All square' : 'Nothing tracked yet';
     }
-    return balance > 0 ? `${partnerName} owes you` : `You owe ${partnerName}`;
+    return balance > 0 ? `${partnerName} owes ${myName}` : `${myName} owe ${partnerName}`;
   });
 
   protected readonly subtitle = computed(() => {
