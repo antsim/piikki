@@ -8,6 +8,7 @@ import { LedgerStorage, PersistedLedger } from './ledger-storage';
  */
 export class InMemoryLedgerStorage extends LedgerStorage {
   override readonly durable = false;
+  override readonly backend = 'local' as const;
   private transactions = new Map<string, Transaction>();
   private settings: LedgerSettings | null = null;
 

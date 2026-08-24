@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { RouterLink, RouterOutlet } from '@angular/router';
+import { AppConfigStore } from './core/config/app-config.store';
 import { LedgerStore } from './core/state/ledger-store';
 import { ToastHost } from './shared/ui/toast-host';
 
@@ -12,4 +13,5 @@ import { ToastHost } from './shared/ui/toast-host';
 })
 export class App {
   protected readonly store = inject(LedgerStore);
+  protected readonly appConfig = inject(AppConfigStore);
 }

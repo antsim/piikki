@@ -46,3 +46,6 @@ Thumbs.db
 # Local env
 .env
 .env.local
+
+# Per-deployment Supabase config (see public/config.example.json)
+/public/config.json

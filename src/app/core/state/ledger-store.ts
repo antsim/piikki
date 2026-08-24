@@ -39,6 +39,17 @@ export class LedgerStore {
   readonly error = this.errorSignal.asReadonly();
   /** False when the browser gave us no persistent storage — the UI warns about it. */
   readonly durable = this.storage.durable;
+  /** 'cloud' once config.json points at Supabase; 'local' means IndexedDB only. */
+  readonly backend = this.storage.backend;
+
+  private refreshInFlight = false;
+  private refreshQueued = false;
+
+  constructor() {
+    // A cloud backend calls this when the *other* device writes something;
+    // local adapters never fire it.
+    this.storage.onRemoteChange(() => void this.refreshFromRemote());
+  }
 
   readonly categories = computed(() => this.settingsSignal().categories);
   readonly selectableCategories = computed(() =>
@@ -77,7 +88,8 @@ export class LedgerStore {
       this.errorSignal.set(null);
     } catch (error) {
       this.statusSignal.set('error');
-      this.errorSignal.set(describe(error, 'Could not open local storage.'));
+      const fallback = this.backend === 'cloud' ? 'Could not reach the cloud database.' : 'Could not open local storage.';
+      this.errorSignal.set(describe(error, fallback));
     }
   }
 
@@ -184,6 +196,35 @@ export class LedgerStore {
     } catch (error) {
       this.transactionsSignal.set(previous);
       this.errorSignal.set(describe(error, 'Could not clear the ledger.'));
+    }
+  }
+
+  /**
+   * Re-fetches everything after a remote-change notification. Bursts of
+   * events (e.g. a bulk import on the other device) are coalesced into one
+   * trailing refresh instead of one fetch per row. Failures are quiet — a
+   * blip in connectivity shouldn't spam the error banner; the next
+   * successful refresh or the next write recovers.
+   */
+  private async refreshFromRemote(): Promise<void> {
+    if (this.refreshInFlight) {
+      this.refreshQueued = true;
+      return;
+    }
+    this.refreshInFlight = true;
+    try {
+      do {
+        this.refreshQueued = false;
+        const { transactions, settings } = await this.storage.load();
+        this.transactionsSignal.set(transactions);
+        if (settings) {
+          this.settingsSignal.set(mergeSettings(settings));
+        }
+      } while (this.refreshQueued);
+    } catch {
+      // Quiet by design — see the doc comment above.
+    } finally {
+      this.refreshInFlight = false;
     }
   }
 

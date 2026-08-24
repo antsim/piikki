@@ -12,6 +12,7 @@ const SETTINGS_KEY = 'settings';
 /** Default adapter: everything lives in the browser's IndexedDB, no server involved. */
 export class IndexedDbLedgerStorage extends LedgerStorage {
   override readonly durable = true;
+  override readonly backend = 'local' as const;
   private db: Promise<IDBDatabase> | null = null;
 
   async load(): Promise<PersistedLedger> {
