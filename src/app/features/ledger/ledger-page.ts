@@ -7,6 +7,7 @@ import { Transaction } from '../../core/domain/transaction.model';
 import { BackupService } from '../../core/backup/backup.service';
 import { MoneyFormatter } from '../../core/format/money-formatter';
 import { LedgerStore } from '../../core/state/ledger-store';
+import { categoryIcon } from '../../shared/ui/category-icon';
 import { TransactionForm, TransactionFormRequest } from '../transaction-form/transaction-form';
 import { BalanceSummary } from './components/balance-summary';
 import { MonthSwitcher } from './components/month-switcher';
@@ -76,6 +77,10 @@ export class LedgerPage {
         description: settlement?.label ?? 'Settlement',
       },
     });
+  }
+
+  protected icon(entry: LedgerEntry): string {
+    return categoryIcon(entry.category);
   }
 
   /** The "Household · paid by Wife · -40 %" line under each row. */
