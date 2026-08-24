@@ -1,7 +1,9 @@
+import { ApplicationRef } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { AuthStore } from '../auth/auth.store';
 import { SETTLEMENT_CATEGORY_ID } from '../domain/split-category.model';
-import { TransactionDraft } from '../domain/transaction.model';
+import { Transaction, TransactionDraft } from '../domain/transaction.model';
 import { InMemoryLedgerStorage } from '../storage/in-memory-ledger-storage';
 import { LedgerStorage } from '../storage/ledger-storage';
 import { LedgerStore } from './ledger-store';
@@ -110,5 +112,40 @@ describe('LedgerStore', () => {
     await store.saveCategory({ id: 'household', label: 'Household', kind: 'expense', myShare: 0.8 });
 
     expect(store.balanceCents()).toBe(4_000);
+  });
+});
+
+describe('LedgerStore auth gating', () => {
+  it('waits for the auth gate before loading itself, then loads exactly once', async () => {
+    const storage = new InMemoryLedgerStorage();
+    const seeded: Transaction = {
+      id: 'tx-1',
+      date: '2026-08-10',
+      description: 'K-Market',
+      amountCents: 10_000,
+      payer: 'me',
+      categoryId: 'household',
+      split: { kind: 'expense', myShare: 0.6 },
+      createdAt: '2026-08-10T00:00:00.000Z',
+      updatedAt: '2026-08-10T00:00:00.000Z',
+    };
+    await storage.putTransaction(seeded);
+
+    TestBed.configureTestingModule({ providers: [{ provide: LedgerStorage, useValue: storage }] });
+    const store = TestBed.inject(LedgerStore);
+    const auth = TestBed.inject(AuthStore);
+    const appRef = TestBed.inject(ApplicationRef);
+
+    // Cloud mode, nobody signed in yet: no auto-load.
+    expect(store.status()).toBe('loading');
+    expect(store.transactions()).toEqual([]);
+
+    // The gate opens (here: local mode deciding there's nothing to log into,
+    // exactly what app.config.ts does for a config-less deployment).
+    auth.disable();
+    await appRef.whenStable();
+
+    expect(store.status()).toBe('ready');
+    expect(store.transactions()).toHaveLength(1);
   });
 });

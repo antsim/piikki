@@ -83,6 +83,22 @@
   padding: 0;
 }
 
+.row--signed-in {
+  margin-top: var(--space-2);
+}
+
+.row__label--truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__nowrap {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .row__label {
   font-size: 14px;
   color: var(--text-muted);

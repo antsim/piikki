@@ -1,5 +1,4 @@
-import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
-import { AppConfig } from '../config/app-config.model';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import { LedgerSettings } from '../domain/settings.model';
 import { Transaction } from '../domain/transaction.model';
 import { LedgerStorage, PersistedLedger } from './ledger-storage';
@@ -23,20 +22,17 @@ const NIL_UUID = '00000000-0000-0000-0000-000000000000';
  * Realtime subscription notifies the store when the *other* device changes
  * something, so both devices converge without either one polling.
  *
- * There is no login yet, so this relies on the anon key plus permissive Row
- * Level Security policies (see supabase/schema.sql) — the page itself, behind
- * the hosting provider's password, is the access boundary. See the schema
- * file for how to tighten this once real auth is added.
+ * Access is gated by Supabase Auth: Row Level Security (see
+ * supabase/schema.sql) only grants the `authenticated` role, so this adapter
+ * is only ever constructed once AuthStore confirms a signed-in session — see
+ * the sequencing in app.config.ts and LedgerStore.
  */
 export class SupabaseLedgerStorage extends LedgerStorage {
   override readonly durable = true;
   override readonly backend = 'cloud' as const;
 
-  private readonly client: SupabaseClient;
-
-  constructor(config: AppConfig) {
+  constructor(private readonly client: SupabaseClient) {
     super();
-    this.client = createClient(config.supabaseUrl, config.supabaseAnonKey);
   }
 
   async load(): Promise<PersistedLedger> {
