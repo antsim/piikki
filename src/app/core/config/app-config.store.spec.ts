@@ -66,4 +66,16 @@ describe('AppConfigStore', () => {
 
     expect(store.status()).toBe('error');
   });
+
+  it('fetches a relative path, not one rooted at the domain — a leading slash ' +
+    'ignores <base href> and silently 404s on a subpath deployment like GitHub Pages', async () => {
+    const fetchSpy = vi.fn<typeof fetch>(async () => new Response('', { status: 404 }));
+    globalThis.fetch = fetchSpy;
+
+    const store = new AppConfigStore();
+    await store.load();
+
+    const [requestedUrl] = fetchSpy.mock.calls[0];
+    expect(String(requestedUrl)).not.toMatch(/^\//);
+  });
 });

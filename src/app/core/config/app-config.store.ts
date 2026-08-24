@@ -25,7 +25,13 @@ export class AppConfigStore {
 
   async load(): Promise<void> {
     try {
-      const response = await fetch('/config.json', { cache: 'no-store' });
+      // Relative, not '/config.json': a leading slash resolves against the
+      // *domain* root, ignoring <base href>, so it silently 404s (and falls
+      // back to local mode) on any subpath deployment — GitHub Pages project
+      // sites serve from /<repo-name>/, not /. A relative path resolves
+      // against <base href> like every other asset URL Angular emits, which
+      // is correct for both the domain-root case and the subpath case.
+      const response = await fetch('config.json', { cache: 'no-store' });
       if (!response.ok) {
         this.statusSignal.set('local');
         return;
