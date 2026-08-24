@@ -22,6 +22,7 @@
     <p class="day">{{ day.label }}</p>
     @for (entry of day.entries; track entry.transaction.id) {
       <button type="button" class="entry" (click)="edit(entry.transaction)">
+        <span class="entry__icon" aria-hidden="true">{{ icon(entry) }}</span>
         <span class="entry__text">
           <span class="entry__description">{{ entry.transaction.description }}</span>
           <span class="entry__meta">{{ meta(entry) }}</span>

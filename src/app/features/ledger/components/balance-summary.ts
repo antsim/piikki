@@ -11,11 +11,14 @@ import { LedgerStore } from '../../../core/state/ledger-store';
       class="hero"
       [class.hero--positive]="balance() > 0"
       [class.hero--negative]="balance() < 0">
+      <span class="hero__glow hero__glow--a" aria-hidden="true"></span>
+      <span class="hero__glow hero__glow--b" aria-hidden="true"></span>
+
       <p class="hero__label">{{ headline() }}</p>
       <p class="hero__amount numeric">{{ money.absolute(balance()) }}</p>
       <p class="hero__meta">{{ subtitle() }}</p>
       @if (balance() !== 0) {
-        <button type="button" class="btn hero__action" (click)="settleUp.emit()">
+        <button type="button" class="btn btn--primary hero__action" (click)="settleUp.emit()">
           Settle up
         </button>
       }
@@ -23,6 +26,9 @@ import { LedgerStore } from '../../../core/state/ledger-store';
   `,
   styles: `
     .hero {
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -31,19 +37,42 @@ import { LedgerStore } from '../../../core/state/ledger-store';
       border-radius: var(--radius-lg);
       background: var(--surface);
       border: 1px solid var(--border);
-      box-shadow: var(--shadow-sm);
+      box-shadow: var(--shadow-md);
       text-align: center;
+    }
+
+    .hero__glow {
+      position: absolute;
+      z-index: -1;
+      width: 240px;
+      height: 240px;
+      border-radius: 50%;
+      filter: blur(60px);
+      opacity: 0.28;
+      pointer-events: none;
+    }
+
+    .hero__glow--a {
+      top: -110px;
+      left: -70px;
+      background: var(--accent);
+    }
+
+    .hero__glow--b {
+      bottom: -120px;
+      right: -80px;
+      background: var(--accent-2);
     }
 
     .hero__label {
       font-size: 14px;
-      font-weight: 550;
+      font-weight: 650;
       color: var(--text-muted);
     }
 
     .hero__amount {
-      font-size: clamp(38px, 12vw, 52px);
-      font-weight: 700;
+      font-size: clamp(40px, 12vw, 56px);
+      font-weight: 800;
       letter-spacing: -0.03em;
       line-height: 1.1;
     }
