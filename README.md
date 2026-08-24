@@ -65,21 +65,27 @@ getting old. Importing a backup replaces everything currently in the app.
 If a browser blocks IndexedDB entirely (some private-browsing modes), the app
 still runs but warns that nothing will be saved.
 
-### Cloud mode (optional — synced across devices)
+### Cloud mode (optional — synced across devices, with login)
 
 Add a Supabase project and every write goes straight to Postgres; a Realtime
 subscription pushes the other device's changes back within about a second, no
-manual export/import needed.
+manual export/import needed. Cloud mode requires signing in — there are
+exactly two accounts (you and your partner), created by hand ahead of time,
+no public sign-up.
 
 **Setup, once:**
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open the SQL editor and run [`supabase/schema.sql`](supabase/schema.sql) —
-   it creates the `transactions` and `settings` tables and the access
-   policies. Safe to re-run.
-3. In the project's **Settings → API** page, copy the **Project URL** and the
-   **anon public** key.
-4. Copy `public/config.example.json` to `public/config.json` (this file is
+   it creates the `transactions` and `settings` tables and locks them to
+   signed-in users. Safe to re-run.
+3. Create the two accounts: **Authentication → Users → Add user**, once for
+   each of you, with an email and password. Check **Auto Confirm User** so
+   there's no email-verification link to click — you're creating these
+   yourselves, so there's nothing to verify.
+4. In the project's **Settings → API** page, copy the **Project URL** and the
+   **anon public** key (this key is not a secret — see below).
+5. Copy `public/config.example.json` to `public/config.json` (this file is
    gitignored — it's a personal, per-deployment file, not something to commit)
    and fill in those two values:
 
@@ -89,23 +95,29 @@ manual export/import needed.
      "supabaseAnonKey": "your-anon-public-key"
    }
    ```
-5. `npm run build` — Angular's asset pipeline copies `public/config.json` into
+6. `npm run build` — Angular's asset pipeline copies `public/config.json` into
    `dist/piikki/browser/config.json` automatically. Deploy as usual.
 
-Settings shows which mode is active ("Cloud sync via Supabase" vs. "This
-device only").
+Opening the deployed app now shows a sign-in screen; each of you logs in once
+per device (the session persists, so it's not a repeat-every-visit thing) and
+can sign out again from Settings, which also shows which mode is active
+("Cloud sync via Supabase" vs. "This device only").
 
-**Security model, and why it's fine here:** the Supabase anon key is not a
-secret by Supabase's design — it ships in the browser bundle and is meant to.
-The database is protected by Row Level Security policies, and
-`supabase/schema.sql` sets those policies to allow anything, because there is
-no login in the app (per the brief: password-protect the *page* at the
-hosting level instead). That means the access boundary is the page, not the
-database — **don't deploy cloud mode without hosting-level password
-protection**, since anyone who can load the page can also read the anon key
-out of it and query the database directly. If real login is added later
-(Supabase Auth), tighten the policies in `supabase/schema.sql` to check
-`auth.uid()` instead of allowing everything.
+**Security model:** Row Level Security (`supabase/schema.sql`) grants full
+access only to the `authenticated` role — the `anon` role (nobody logged in)
+gets nothing. That means the database itself requires a valid login, not just
+the app's UI: even someone who extracts the anon key from the browser bundle
+(which is normal — Supabase's anon key is not a secret and is meant to ship
+in client code) cannot read or write anything without one of your two
+accounts' credentials. Hosting-level password protection on top of this is
+still worth keeping — it stops an unauthenticated visitor from even reaching
+the login screen — but it's a second layer now, not the only one standing
+between the internet and your data.
+
+There's no in-app "forgot password" — with two known people, that path is
+simpler handled from the Supabase dashboard directly (**Authentication →
+Users**, reset either account's password there) than by building a recovery
+flow into the app.
 
 **A rare edge case:** importing a backup or "delete all" does a delete-then-
 insert against Postgres rather than one atomic transaction (the Supabase JS
@@ -124,14 +136,16 @@ src/app/
 ├── core/
 │   ├── domain/      money, dates, transactions, split rules, the balance rules
 │   ├── config/      AppConfigStore — loads config.json, decides local vs. cloud
+│   ├── auth/        AuthStore + the shared Supabase client (cloud mode only)
 │   ├── storage/     LedgerStorage port + IndexedDB / in-memory / Supabase adapters
 │   ├── state/       LedgerStore (signals), ToastStore
 │   ├── backup/      JSON export / import
 │   └── format/      currency + percentage formatting
 ├── features/
+│   ├── auth/        the login screen
 │   ├── ledger/      balance card, month switcher, transaction list
 │   ├── transaction-form/  add / edit dialog
-│   └── settings/    names, split rules, sync status, backup, formatting
+│   └── settings/    names, split rules, sync + sign-out, backup, formatting
 └── shared/ui/       toast host
 ```
 
@@ -146,15 +160,22 @@ Notable choices:
   `config.json` once at boot and a small factory (`ledger-storage.provider.ts`)
   picks the adapter; everything above that line is unaware which one it got.
 - **The Supabase SDK is lazy-loaded**, via a thin wrapper
-  (`LazySupabaseLedgerStorage`) that dynamically `import()`s the real adapter.
-  Local-only deployments never download it — it only ships to people who
-  actually configure cloud mode.
+  (`LazySupabaseLedgerStorage`) that dynamically `import()`s the real adapter,
+  plus a shared `getSupabaseClient()` factory that both it and `AuthStore` use
+  — one client instance per page, as Supabase recommends, built only once
+  something actually needs it. Local-only deployments never download it.
 - **Writes are optimistic** — the UI updates immediately and rolls back with an
   error message if the write fails, cloud or local alike.
 - **Cloud mode syncs live**, not by polling: `SupabaseLedgerStorage` opens a
   Realtime subscription and `LedgerStore` re-fetches when it fires, coalescing
   a burst of remote changes into one refresh.
-- Routes are lazy-loaded; the initial bundle is ~70 kB compressed (local
+- **`LedgerStore` gates its own load on `AuthStore.readyToLoad`** rather than
+  bootstrap code deciding when it's safe to call — local mode is ready
+  immediately, cloud mode with an existing session loads inline during
+  startup, and cloud mode with no session yet renders the login screen and
+  loads reactively the moment sign-in succeeds. One rule, three cases, instead
+  of the call sites having to know which case they're in.
+- Routes are lazy-loaded; the initial bundle is ~72 kB compressed (local
   mode never pays for the Supabase client at all).
 
 ## Development

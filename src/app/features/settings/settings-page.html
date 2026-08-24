@@ -9,6 +9,14 @@
       <span class="dot dot--cloud"></span>
       Cloud sync via Supabase — changes appear on every device.
     </p>
+    @if (auth.user(); as user) {
+      <div class="row row--signed-in">
+        <span class="row__label row__label--truncate">Signed in as {{ user.email }}</span>
+        <button type="button" class="btn btn--ghost row__nowrap" (click)="signOut()">
+          Sign out
+        </button>
+      </div>
+    }
   } @else {
     <p class="section__hint">
       <span class="dot dot--local"></span>

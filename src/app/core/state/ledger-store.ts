@@ -1,4 +1,5 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, effect, inject, Injectable, signal } from '@angular/core';
+import { AuthStore } from '../auth/auth.store';
 import { currentMonthKey, MonthKey } from '../domain/dates';
 import {
   buildEntries,
@@ -24,6 +25,7 @@ export type LedgerStatus = 'loading' | 'ready' | 'error';
 @Injectable({ providedIn: 'root' })
 export class LedgerStore {
   private readonly storage = inject(LedgerStorage);
+  private readonly auth = inject(AuthStore);
 
   private readonly transactionsSignal = signal<readonly Transaction[]>([]);
   private readonly settingsSignal = signal<LedgerSettings>(DEFAULT_SETTINGS);
@@ -44,11 +46,24 @@ export class LedgerStore {
 
   private refreshInFlight = false;
   private refreshQueued = false;
+  private hasLoadedOnce = false;
 
   constructor() {
     // A cloud backend calls this when the *other* device writes something;
     // local adapters never fire it.
     this.storage.onRemoteChange(() => void this.refreshFromRemote());
+
+    // Local mode is "ready" immediately; cloud mode has to wait for a sign-in
+    // that might not happen until after this component tree has already
+    // rendered a login screen. Rather than the app-bootstrap code deciding
+    // when to call load(), LedgerStore watches the gate itself and loads the
+    // moment it opens — bootstrap can await it when the gate is already open
+    // (see app.config.ts) and simply not await it otherwise.
+    effect(() => {
+      if (this.auth.readyToLoad() && !this.hasLoadedOnce) {
+        void this.load();
+      }
+    });
   }
 
   readonly categories = computed(() => this.settingsSignal().categories);
@@ -79,6 +94,7 @@ export class LedgerStore {
   });
 
   async load(): Promise<void> {
+    this.hasLoadedOnce = true;
     this.statusSignal.set('loading');
     try {
       const { transactions, settings } = await this.storage.load();

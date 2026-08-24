@@ -1,6 +1,7 @@
 import { AppConfig } from '../config/app-config.model';
 import { LedgerSettings } from '../domain/settings.model';
 import { Transaction } from '../domain/transaction.model';
+import { getSupabaseClient } from '../auth/supabase-client';
 import { LedgerStorage, PersistedLedger } from './ledger-storage';
 
 /**
@@ -20,8 +21,8 @@ export class LazySupabaseLedgerStorage extends LedgerStorage {
 
   constructor(config: AppConfig) {
     super();
-    this.real = import('./supabase-ledger-storage').then(
-      ({ SupabaseLedgerStorage }) => new SupabaseLedgerStorage(config),
+    this.real = Promise.all([getSupabaseClient(config), import('./supabase-ledger-storage')]).then(
+      ([client, { SupabaseLedgerStorage }]) => new SupabaseLedgerStorage(client),
     );
   }
 

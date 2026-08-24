@@ -2,16 +2,21 @@
 --
 -- Run this once in the Supabase SQL editor (Project -> SQL Editor -> New query)
 -- on a fresh project. It creates the two tables the app reads and writes, and
--- opens them up to the anon key.
+-- restricts them to signed-in users. Re-running it on a project that already
+-- has these tables is safe — every statement is written to not error on a
+-- second run — so if you set this up before auth existed, just re-run the
+-- whole file to pick up the tightened policies below.
 --
--- Security model: there is no login in the app yet, so every request uses the
--- project's anon key, which every visitor to the deployed page can see (that
--- is how Supabase's anon key is designed to work — it is not a secret, it is
--- meant to sit in a client bundle). The access boundary is therefore the
--- *page*, not the database: keep the deployed app behind your hosting
--- provider's password protection. The policies below deliberately allow the
--- anon role to do anything to these two tables. If you add real login later
--- (Supabase Auth), tighten these policies to check auth.uid() instead.
+-- Security model: the app has Supabase Auth now (see README), so every
+-- request must carry a valid session for one of the accounts you create by
+-- hand in the dashboard — there is no self-signup. The `anon` role (i.e.
+-- nobody logged in) gets no access at all; only `authenticated` does. This is
+-- real defense in depth: even someone who extracts the anon key from the
+-- client bundle cannot read or write the database without a valid login,
+-- unlike the anon-key-only model this schema used to use. Keep the deployed
+-- page behind your hosting provider's password too — that stops an
+-- unauthenticated visitor from even reaching the login screen, but it's now
+-- a second layer, not the only one.
 
 create table if not exists transactions (
   id uuid primary key,
@@ -44,17 +49,21 @@ create table if not exists settings (
 alter table transactions enable row level security;
 alter table settings enable row level security;
 
+-- Drop the old anon-key-era policy if this project had it (safe if it never did).
 drop policy if exists "anon full access" on transactions;
-create policy "anon full access" on transactions
+drop policy if exists "anon full access" on settings;
+
+drop policy if exists "authenticated full access" on transactions;
+create policy "authenticated full access" on transactions
   for all
-  to anon, authenticated
+  to authenticated
   using (true)
   with check (true);
 
-drop policy if exists "anon full access" on settings;
-create policy "anon full access" on settings
+drop policy if exists "authenticated full access" on settings;
+create policy "authenticated full access" on settings
   for all
-  to anon, authenticated
+  to authenticated
   using (true)
   with check (true);
 
@@ -73,3 +82,8 @@ begin
   alter publication supabase_realtime add table settings;
 exception when duplicate_object then null;
 end $$;
+
+-- This file does not create the two user accounts — do that by hand:
+-- Authentication -> Users -> Add user, once for each of you, with
+-- "Auto Confirm User" checked so there's no email-verification step. See the
+-- README for the full walkthrough.

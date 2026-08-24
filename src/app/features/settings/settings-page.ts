@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { AuthStore } from '../../core/auth/auth.store';
 import { BackupService } from '../../core/backup/backup.service';
 import { SplitCategory } from '../../core/domain/split-category.model';
 import { MoneyFormatter } from '../../core/format/money-formatter';
@@ -17,6 +18,7 @@ export class SettingsPage {
   protected readonly store = inject(LedgerStore);
   protected readonly backup = inject(BackupService);
   protected readonly money = inject(MoneyFormatter);
+  protected readonly auth = inject(AuthStore);
   private readonly toasts = inject(ToastStore);
 
   protected readonly importError = signal<string | null>(null);
@@ -107,6 +109,10 @@ export class SettingsPage {
       await this.store.clearTransactions();
       this.toasts.show('All transactions deleted');
     }
+  }
+
+  protected async signOut(): Promise<void> {
+    await this.auth.signOut();
   }
 
   protected readValue(event: Event): string {
