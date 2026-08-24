@@ -1,0 +1,80 @@
+<app-balance-summary (settleUp)="settleUp()" />
+
+@if (backup.backupOverdue()) {
+  <p class="reminder">
+    <span>Your last backup is old. Keep a copy somewhere safe.</span>
+    <a routerLink="/settings" class="reminder__link">Back up</a>
+  </p>
+}
+
+<app-month-switcher
+  [month]="store.selectedMonth()"
+  [months]="store.months()"
+  (monthChange)="store.showMonth($event)" />
+
+<section class="month card">
+  <div class="month__edge">
+    <span>Carried over from earlier months</span>
+    <span class="numeric">{{ money.signed(summary().openingCents) }}</span>
+  </div>
+
+  @for (day of days(); track day.date) {
+    <p class="day">{{ day.label }}</p>
+    @for (entry of day.entries; track entry.transaction.id) {
+      <button type="button" class="entry" (click)="edit(entry.transaction)">
+        <span class="entry__text">
+          <span class="entry__description">{{ entry.transaction.description }}</span>
+          <span class="entry__meta">{{ meta(entry) }}</span>
+        </span>
+        <span class="entry__numbers">
+          <span
+            class="entry__delta numeric"
+            [class.amount-positive]="entry.deltaCents > 0"
+            [class.amount-negative]="entry.deltaCents < 0">
+            {{ money.signed(entry.deltaCents) }}
+          </span>
+          <span class="entry__gross numeric">{{ money.format(entry.transaction.amountCents) }}</span>
+        </span>
+      </button>
+    }
+  } @empty {
+    <p class="empty">Nothing recorded in {{ monthName() }} yet.</p>
+  }
+
+  <div class="month__edge month__edge--closing">
+    <span>Balance after {{ monthName() }}</span>
+    <span
+      class="numeric"
+      [class.amount-positive]="summary().closingCents > 0"
+      [class.amount-negative]="summary().closingCents < 0">
+      {{ money.signed(summary().closingCents) }}
+    </span>
+  </div>
+</section>
+
+@if (summary().entries.length) {
+  <section class="stats">
+    <div class="stat">
+      <span class="stat__label">Paid by {{ store.settings().myName }}</span>
+      <span class="stat__value numeric">{{ money.format(summary().paidByMeCents) }}</span>
+    </div>
+    <div class="stat">
+      <span class="stat__label">Paid by {{ store.settings().partnerName }}</span>
+      <span class="stat__value numeric">{{ money.format(summary().paidByPartnerCents) }}</span>
+    </div>
+    <div class="stat">
+      <span class="stat__label">Settled</span>
+      <span class="stat__value numeric">{{ money.format(summary().settledCents) }}</span>
+    </div>
+  </section>
+}
+
+<button type="button" class="fab" (click)="add()" aria-label="Add transaction">
+  <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" />
+  </svg>
+</button>
+
+@if (formRequest(); as request) {
+  <app-transaction-form [request]="request" (closed)="formRequest.set(null)" />
+}

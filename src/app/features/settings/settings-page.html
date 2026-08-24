@@ -1,0 +1,135 @@
+<a routerLink="/" class="back">‹ Back to ledger</a>
+
+<h1 class="page-title">Settings</h1>
+
+<section class="card section">
+  <h2 class="section__title">People</h2>
+  <p class="section__hint">Names are only used for labels in this app.</p>
+
+  <label class="row">
+    <span class="row__label">You</span>
+    <input
+      class="text-input row__input"
+      [value]="store.settings().myName"
+      (change)="renameMe(readValue($event))" />
+  </label>
+
+  <label class="row">
+    <span class="row__label">Partner</span>
+    <input
+      class="text-input row__input"
+      [value]="store.settings().partnerName"
+      (change)="renamePartner(readValue($event))" />
+  </label>
+</section>
+
+<section class="card section">
+  <h2 class="section__title">Split rules</h2>
+  <p class="section__hint">
+    The share is what <strong>you</strong> are responsible for. Editing a rule affects new
+    transactions only — rows already saved keep the split they were entered with.
+  </p>
+
+  @for (category of store.categories(); track category.id) {
+    <div class="rule" [class.rule--archived]="category.archived">
+      <input
+        class="text-input rule__label"
+        [value]="category.label"
+        (change)="renameCategory(category, readValue($event))" />
+
+      @if (category.kind === 'expense') {
+        <label class="rule__share">
+          <input
+            class="text-input numeric rule__share-input"
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            [value]="percentOf(category)"
+            (change)="setShare(category, readValue($event))" />
+          <span class="rule__share-suffix">% mine</span>
+        </label>
+      } @else {
+        <span class="rule__badge">Direct payment</span>
+      }
+
+      <button type="button" class="btn btn--ghost rule__action" (click)="toggleArchived(category)">
+        {{ category.archived ? 'Restore' : 'Hide' }}
+      </button>
+    </div>
+  }
+
+  <div class="section__actions">
+    <button type="button" class="btn" (click)="addCategory()">Add rule</button>
+
+    <label class="row row--inline">
+      <span class="row__label">Default</span>
+      <select
+        class="text-input"
+        [value]="store.settings().defaultCategoryId"
+        (change)="setDefaultCategory(readValue($event))">
+        @for (category of store.selectableCategories(); track category.id) {
+          <option [value]="category.id">{{ category.label }}</option>
+        }
+      </select>
+    </label>
+  </div>
+</section>
+
+<section class="card section">
+  <h2 class="section__title">Backup</h2>
+  <p class="section__hint">
+    Everything is stored in this browser only. Export a JSON file to keep a copy or to move the
+    ledger to another device.
+  </p>
+
+  <p class="section__status">
+    @if (backup.lastExportAt(); as last) {
+      Last export: {{ last.slice(0, 10) }}
+    } @else {
+      Never exported.
+    }
+  </p>
+
+  <div class="section__actions">
+    <button type="button" class="btn btn--primary" (click)="exportBackup()">Export backup</button>
+
+    <label class="btn import">
+      Import backup
+      <input type="file" accept="application/json,.json" (change)="importBackup($event)" hidden />
+    </label>
+  </div>
+
+  @if (importError(); as error) {
+    <p class="section__error">{{ error }}</p>
+  }
+  <p class="section__hint">Importing replaces everything currently in the app.</p>
+</section>
+
+<section class="card section">
+  <h2 class="section__title">Formatting</h2>
+
+  <label class="row">
+    <span class="row__label">Currency</span>
+    <input
+      class="text-input row__input"
+      maxlength="3"
+      [value]="store.settings().currency"
+      (change)="setCurrency(readValue($event))" />
+  </label>
+
+  <label class="row">
+    <span class="row__label">Number format</span>
+    <input
+      class="text-input row__input"
+      [value]="store.settings().locale"
+      (change)="setLocale(readValue($event))" />
+  </label>
+  <p class="section__hint">Locale code, e.g. fi-FI for 1 234,56 € or en-GB for €1,234.56.</p>
+</section>
+
+<section class="card section section--danger">
+  <h2 class="section__title">Danger zone</h2>
+  <p class="section__hint">Deletes every transaction. Names and split rules are kept.</p>
+  <button type="button" class="btn btn--danger" (click)="clearAll()">Delete all transactions</button>
+</section>
