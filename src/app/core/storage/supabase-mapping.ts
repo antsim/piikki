@@ -7,7 +7,13 @@
 import { isValidIsoDate } from '../domain/dates';
 import { DEFAULT_SETTINGS, LedgerSettings } from '../domain/settings.model';
 import { SplitCategory } from '../domain/split-category.model';
-import { Payer, SplitKind, Transaction } from '../domain/transaction.model';
+import {
+  normalisePersonalAmounts,
+  Payer,
+  personalAmountsOf,
+  SplitKind,
+  Transaction,
+} from '../domain/transaction.model';
 
 /** Fixed primary key: the settings table only ever holds one row. */
 export const SETTINGS_ROW_ID = 'singleton';
@@ -21,6 +27,14 @@ export interface TransactionRow {
   readonly category_id: string;
   readonly split_kind: string;
   readonly split_my_share: number;
+  /**
+   * Optional in the type, not in the schema: a project whose `transactions`
+   * table predates personal items simply won't return these columns, and a
+   * missing column should read as "nothing personal" rather than crash the
+   * whole load. Writing still needs the columns — see supabase/schema.sql.
+   */
+  readonly personal_mine_cents?: number | null;
+  readonly personal_partner_cents?: number | null;
   readonly note: string | null;
   readonly created_at: string;
   readonly updated_at: string;
@@ -47,6 +61,8 @@ export function transactionToRow(transaction: Transaction): TransactionRow {
     category_id: transaction.categoryId,
     split_kind: transaction.split.kind,
     split_my_share: transaction.split.myShare,
+    personal_mine_cents: personalAmountsOf(transaction).mineCents,
+    personal_partner_cents: personalAmountsOf(transaction).partnerCents,
     note: transaction.note ?? null,
     created_at: transaction.createdAt,
     updated_at: transaction.updatedAt,
@@ -64,14 +80,22 @@ export function rowToTransaction(row: TransactionRow): Transaction {
   if (row.split_kind !== 'expense' && row.split_kind !== 'settlement') {
     throw new Error(`Transaction ${row.id} has an invalid split kind.`);
   }
+  const amountCents = Math.round(Math.abs(row.amount_cents));
   return {
     id: row.id,
     date: row.date,
     description: row.description,
-    amountCents: Math.round(Math.abs(row.amount_cents)),
+    amountCents,
     payer: row.payer as Payer,
     categoryId: row.category_id,
     split: { kind: row.split_kind as SplitKind, myShare: row.split_my_share },
+    personal: normalisePersonalAmounts(
+      {
+        mineCents: row.personal_mine_cents ?? 0,
+        partnerCents: row.personal_partner_cents ?? 0,
+      },
+      amountCents,
+    ),
     note: row.note ?? undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

@@ -1,9 +1,21 @@
 import { isValidIsoDate } from './dates';
 import { DEFAULT_SETTINGS, LedgerSettings } from './settings.model';
 import { SplitCategory } from './split-category.model';
-import { Payer, SplitKind, Transaction } from './transaction.model';
+import {
+  normalisePersonalAmounts,
+  Payer,
+  PersonalAmounts,
+  SplitKind,
+  Transaction,
+} from './transaction.model';
 
-export const SNAPSHOT_VERSION = 1;
+/**
+ * Bumped to 2 when personal items arrived. A v1 file still restores here (it
+ * simply has nothing personal in it), but an older build refuses a v2 file
+ * outright rather than importing it with the personal amounts silently
+ * dropped — which would quietly change the balance.
+ */
+export const SNAPSHOT_VERSION = 2;
 const SNAPSHOT_APP = 'piikki';
 
 /** The shape of the JSON backup file. */
@@ -79,18 +91,39 @@ function parseTransaction(raw: unknown, index: number): Transaction {
   }
 
   const now = new Date().toISOString();
+  const rounded = Math.round(Math.abs(amountCents));
   return {
     id: typeof item['id'] === 'string' && item['id'] ? item['id'] : crypto.randomUUID(),
     date,
     description: typeof item['description'] === 'string' ? item['description'] : '',
-    amountCents: Math.round(Math.abs(amountCents)),
+    amountCents: rounded,
     payer: payer as Payer,
     categoryId: typeof item['categoryId'] === 'string' ? item['categoryId'] : 'household',
     split: parseSplit(item['split'], where),
+    personal: parsePersonal(item['personal'], rounded),
     note: typeof item['note'] === 'string' ? item['note'] : undefined,
     createdAt: typeof item['createdAt'] === 'string' ? item['createdAt'] : now,
     updatedAt: typeof item['updatedAt'] === 'string' ? item['updatedAt'] : now,
   };
+}
+
+/**
+ * Personal items are optional and were not in v1 backups, so anything that
+ * isn't a usable pair of numbers just means "nothing personal" — no reason to
+ * fail a whole restore over it. `normalisePersonalAmounts` does the clamping.
+ */
+function parsePersonal(raw: unknown, amountCents: number): PersonalAmounts | undefined {
+  if (raw === null || typeof raw !== 'object') {
+    return undefined;
+  }
+  const item = raw as Record<string, unknown>;
+  return normalisePersonalAmounts(
+    {
+      mineCents: typeof item['mineCents'] === 'number' ? item['mineCents'] : 0,
+      partnerCents: typeof item['partnerCents'] === 'number' ? item['partnerCents'] : 0,
+    },
+    amountCents,
+  );
 }
 
 function parseSplit(raw: unknown, where: string): { kind: SplitKind; myShare: number } {

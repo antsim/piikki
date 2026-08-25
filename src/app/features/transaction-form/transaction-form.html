@@ -21,6 +21,55 @@
       </div>
     </div>
 
+    @if (supportsPersonal()) {
+      <div class="field">
+        @if (personalOpen()) {
+          <span class="field-label">Personal items</span>
+          <p class="personal__hint">
+            Parts of this receipt that only one of you should pay for. They come off the total
+            before it is split, and land in full on whoever they belong to.
+          </p>
+          <div class="personal">
+            <label class="personal__row">
+              <span class="personal__who">{{ settings().myName }}'s own</span>
+              <span class="personal__amount">
+                <input
+                  class="personal__input numeric"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="0,00"
+                  [value]="personalMineText()"
+                  (input)="personalMineText.set(readValue($event))" />
+                <span class="personal__currency">{{ settings().currency }}</span>
+              </span>
+            </label>
+            <label class="personal__row">
+              <span class="personal__who">{{ settings().partnerName }}'s own</span>
+              <span class="personal__amount">
+                <input
+                  class="personal__input numeric"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  placeholder="0,00"
+                  [value]="personalPartnerText()"
+                  (input)="personalPartnerText.set(readValue($event))" />
+                <span class="personal__currency">{{ settings().currency }}</span>
+              </span>
+            </label>
+          </div>
+          @if (personalExceedsAmount()) {
+            <p class="personal__error" role="alert">
+              Personal items come to more than the total amount.
+            </p>
+          }
+        } @else {
+          <button type="button" class="personal__toggle" (click)="personalOpen.set(true)">
+            + Personal items (not shared)
+          </button>
+        }
+      </div>
+    }
+
     <div class="field">
       <label class="field-label" for="description">Place</label>
       <input
@@ -96,24 +145,56 @@
 
     <section
       class="preview"
-      [class.preview--positive]="deltaCents() > 0"
-      [class.preview--negative]="deltaCents() < 0">
+      [class.preview--positive]="!personalExceedsAmount() && deltaCents() > 0"
+      [class.preview--negative]="!personalExceedsAmount() && deltaCents() < 0">
+      @if (hasPersonal()) {
+        <div class="preview__row">
+          <span>Receipt total</span>
+          <span class="numeric">{{ money.format(amountCents()) }}</span>
+        </div>
+        @if (personalMineCents()) {
+          <div class="preview__row">
+            <span>{{ settings().myName }}'s own</span>
+            <span class="numeric">−{{ money.format(personalMineCents()) }}</span>
+          </div>
+        }
+        @if (personalPartnerCents()) {
+          <div class="preview__row">
+            <span>{{ settings().partnerName }}'s own</span>
+            <span class="numeric">−{{ money.format(personalPartnerCents()) }}</span>
+          </div>
+        }
+        <div class="preview__row preview__row--subtotal">
+          <span>Shared</span>
+          <span class="numeric">
+            {{ personalExceedsAmount() ? '—' : money.format(sharedCents()) }}
+          </span>
+        </div>
+      }
+      <!-- While the personal items overflow the total there is no honest
+           balance to show, so the figures below hold rather than assert one. -->
       @if (!isOpeningBalance()) {
         <div class="preview__row">
           <span>Share</span>
-          <span class="numeric">{{ money.percent(percent()) }}</span>
+          <span class="numeric">{{ personalExceedsAmount() ? '—' : money.percent(percent()) }}</span>
         </div>
       }
       <div class="preview__row">
         <span>Balance change</span>
-        <span class="numeric preview__delta">{{ money.signed(deltaCents()) }}</span>
+        <span class="numeric preview__delta">
+          {{ personalExceedsAmount() ? '—' : money.signed(deltaCents()) }}
+        </span>
       </div>
       <div class="preview__row preview__row--total">
         <span>Balance after</span>
-        <span class="numeric">{{ money.signed(resultingBalanceCents()) }}</span>
+        <span class="numeric">
+          {{ personalExceedsAmount() ? '—' : money.signed(resultingBalanceCents()) }}
+        </span>
       </div>
       <p class="preview__note">
-        @if (deltaCents() > 0) {
+        @if (personalExceedsAmount()) {
+          Personal items come to more than the total — adjust them to see the balance.
+        } @else if (deltaCents() > 0) {
           {{ settings().partnerName }} owes you {{ money.absolute(deltaCents()) }} more.
         } @else if (deltaCents() < 0) {
           You owe {{ settings().partnerName }} {{ money.absolute(deltaCents()) }} more.
