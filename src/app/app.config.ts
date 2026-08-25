@@ -2,11 +2,13 @@ import {
   ApplicationConfig,
   inject,
   Injector,
+  isDevMode,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
   runInInjectionContext,
 } from '@angular/core';
 import { provideRouter, withComponentInputBinding, withInMemoryScrolling } from '@angular/router';
+import { provideServiceWorker } from '@angular/service-worker';
 import { AuthStore } from './core/auth/auth.store';
 import { AppConfigStore } from './core/config/app-config.store';
 import { LedgerStore } from './core/state/ledger-store';
@@ -51,6 +53,10 @@ export const appConfig: ApplicationConfig = {
           await ledgerStore.load();
         }
       })();
+    }),
+    provideServiceWorker('ngsw-worker.js', {
+      enabled: !isDevMode(),
+      registrationStrategy: 'registerWhenStable:30000',
     }),
   ],
 };

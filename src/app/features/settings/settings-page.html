@@ -9,6 +9,12 @@
       <span class="dot dot--cloud"></span>
       Cloud sync via Supabase — changes appear on every device.
     </p>
+    @if (store.pendingSyncCount() > 0) {
+      <p class="section__hint">
+        {{ store.pendingSyncCount() }} {{ store.pendingSyncCount() === 1 ? 'change' : 'changes' }}
+        made offline, waiting to sync.
+      </p>
+    }
     @if (auth.user(); as user) {
       <div class="row row--signed-in">
         <span class="row__label row__label--truncate">Signed in as {{ user.email }}</span>

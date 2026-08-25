@@ -6,6 +6,7 @@ import { OPENING_BALANCE_CATEGORY_ID } from '../../core/domain/split-category.mo
 import { Transaction } from '../../core/domain/transaction.model';
 import { BackupService } from '../../core/backup/backup.service';
 import { MoneyFormatter } from '../../core/format/money-formatter';
+import { ConnectivityStore } from '../../core/state/connectivity-store';
 import { LedgerStore } from '../../core/state/ledger-store';
 import { categoryIcon } from '../../shared/ui/category-icon';
 import { TransactionForm, TransactionFormRequest } from '../transaction-form/transaction-form';
@@ -29,6 +30,7 @@ export class LedgerPage {
   protected readonly store = inject(LedgerStore);
   protected readonly money = inject(MoneyFormatter);
   protected readonly backup = inject(BackupService);
+  protected readonly connectivity = inject(ConnectivityStore);
 
   /** Non-null while the add/edit dialog is open. */
   protected readonly formRequest = signal<TransactionFormRequest | null>(null);
