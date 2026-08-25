@@ -13,6 +13,9 @@ carried forward automatically.
   By default the data lives in the browser's IndexedDB; optionally, point it at
   a [Supabase](https://supabase.com) project (a hosted Postgres database) and
   every device sees the same ledger live — no server code, just a config file.
+- **Installable and offline-capable.** It's a PWA — add it to your home
+  screen and it works without a connection, syncing back up once you're
+  online again. See [Installing it as an app, and working offline](#installing-it-as-an-app-and-working-offline).
 
 ## The split rules
 
@@ -68,6 +71,33 @@ for a number carried in from elsewhere).
 There are no manual "carry over" rows. A month's opening balance is simply the
 running total of everything before it, so the closing balance of one month is
 the opening balance of the next, always.
+
+## Installing it as an app, and working offline
+
+piikki is a PWA: "Add to Home Screen" (or the install icon in a desktop
+browser's address bar) puts it on your phone or dock like a real app, no
+browser chrome, with its own icon.
+
+That also means the app shell — the HTML/JS/CSS, not your data — is cached
+by a service worker, so opening it doesn't need a connection once you've
+loaded it at least once. What "offline" then does depends on which storage
+mode you're in:
+
+- **Local mode** — already fully offline by nature; every write goes
+  straight to IndexedDB, connection or not. The service worker just makes
+  the app itself launch instantly and without a network round trip too.
+- **Cloud mode** — reads fall back to the last successfully synced snapshot
+  instead of an error screen, and any add/edit/delete you make while offline
+  is queued on-device and replayed automatically the moment the browser
+  reports being back online — the ledger banner shows "N changes made while
+  offline" for as long as that replay is pending. Backup import and "delete
+  all" are the one exception: those bulk-replace the whole ledger and simply
+  require a connection, the same as before.
+
+Two devices editing the same row while one was offline resolves the way it
+always does in cloud mode: whichever write reaches Postgres last wins, and
+the Realtime subscription brings the other device's screen up to date within
+about a second of reconnecting.
 
 ## Where the data lives
 
@@ -162,7 +192,8 @@ src/app/
 │   ├── domain/      money, dates, transactions, split rules, the balance rules
 │   ├── config/      AppConfigStore — loads config.json, decides local vs. cloud
 │   ├── auth/        AuthStore + the shared Supabase client (cloud mode only)
-│   ├── storage/     LedgerStorage port + IndexedDB / in-memory / Supabase adapters
+│   ├── storage/     LedgerStorage port + IndexedDB / in-memory / Supabase adapters,
+│   │                plus OfflineQueueLedgerStorage (the offline cache + write queue)
 │   ├── state/       LedgerStore (signals), ToastStore
 │   ├── backup/      JSON export / import
 │   └── format/      currency + percentage formatting
@@ -202,6 +233,33 @@ Notable choices:
   of the call sites having to know which case they're in.
 - Routes are lazy-loaded; the initial bundle is ~72 kB compressed (local
   mode never pays for the Supabase client at all).
+- **Cloud mode's write path goes through `OfflineQueueLedgerStorage`**, a
+  decorator around `LazySupabaseLedgerStorage` — `LedgerStore` still only
+  knows about the `LedgerStorage` interface. It keeps its own small
+  IndexedDB database (`IndexedDbOfflineStore`, separate from the main
+  `piikki` one, with an in-memory fallback for browsers without IndexedDB)
+  holding the last successfully loaded snapshot and a queue of writes that
+  failed while offline. A write is judged "offline" heuristically
+  (`navigator.onLine`, or the `TypeError` a `fetch()` throws on a network
+  failure) so a real server error still surfaces immediately instead of
+  disappearing into the queue; see its `isOfflineError` doc comment. The
+  queue replays on the browser's `online` event and, on success, fires the
+  same `onRemoteChange` notification a partner's write would — `LedgerStore`
+  doesn't need to know the difference. Bulk replace (backup import, "start
+  over") is intentionally not queued, for the same non-atomicity reason
+  `SupabaseLedgerStorage.replaceAll` already documents.
+- **The service worker (`@angular/service-worker`, configured in
+  `ngsw-config.json`) caches app code lazily, not on install** — unlike the
+  Angular CLI's default PWA scaffold, which prefetches every JS/CSS chunk
+  up front. A blanket prefetch would silently defeat the lazy-loading point
+  above: the Supabase SDK chunk would get downloaded in the background for
+  local-only deployments the first time the service worker installs, even
+  though nothing ever imports it. Lazy caching means a chunk is only ever
+  fetched (and then cached for next time) when the app actually requests
+  it, so a local-only deployment still never downloads it — offline support
+  just costs one extra reload after the first successful visit before the
+  full app shell is cached, versus prefetching it instantly at install
+  time.
 
 ## Development
 

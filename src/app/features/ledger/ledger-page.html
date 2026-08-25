@@ -1,5 +1,21 @@
 <app-balance-summary (settleUp)="settleUp()" />
 
+@if (store.backend === 'cloud' && !connectivity.online()) {
+  <p class="reminder">
+    <span>
+      You're offline. Showing the last synced data — changes are saved and will sync automatically
+      once you're back online.
+    </span>
+  </p>
+} @else if (store.pendingSyncCount() > 0) {
+  <p class="reminder">
+    <span>
+      Syncing {{ store.pendingSyncCount() }}
+      {{ store.pendingSyncCount() === 1 ? 'change' : 'changes' }} made while offline…
+    </span>
+  </p>
+}
+
 @if (backup.backupOverdue()) {
   <p class="reminder">
     <span>Your last backup is old. Keep a copy somewhere safe.</span>

@@ -35,4 +35,18 @@ export abstract class LedgerStorage {
   onRemoteChange(_listener: () => void): () => void {
     return () => {};
   }
+
+  /**
+   * Writes made while offline and not yet synced to the remote backend.
+   * Always 0 for local-only adapters — there's nothing to sync anywhere.
+   * See OfflineQueueLedgerStorage, the only adapter that overrides this.
+   */
+  pendingSyncCount(): number {
+    return 0;
+  }
+
+  /** Notifies `listener` whenever pendingSyncCount() changes. */
+  onPendingSyncChange(_listener: (count: number) => void): () => void {
+    return () => {};
+  }
 }

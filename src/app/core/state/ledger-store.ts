@@ -1,12 +1,7 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { AuthStore } from '../auth/auth.store';
 import { currentMonthKey, MonthKey } from '../domain/dates';
-import {
-  buildEntries,
-  buildMonthSummary,
-  listMonths,
-  totalBalanceCents,
-} from '../domain/ledger';
+import { buildEntries, buildMonthSummary, listMonths, totalBalanceCents } from '../domain/ledger';
 import { DEFAULT_SETTINGS, LedgerSettings } from '../domain/settings.model';
 import { LedgerSnapshot } from '../domain/snapshot.model';
 import { OPENING_BALANCE_CATEGORY_ID, SplitCategory } from '../domain/split-category.model';
@@ -31,6 +26,7 @@ export class LedgerStore {
   private readonly settingsSignal = signal<LedgerSettings>(DEFAULT_SETTINGS);
   private readonly statusSignal = signal<LedgerStatus>('loading');
   private readonly errorSignal = signal<string | null>(null);
+  private readonly pendingSyncCountSignal = signal(0);
 
   /** Which month the ledger view is showing. */
   readonly selectedMonth = signal<MonthKey>(currentMonthKey());
@@ -43,15 +39,19 @@ export class LedgerStore {
   readonly durable = this.storage.durable;
   /** 'cloud' once config.json points at Supabase; 'local' means IndexedDB only. */
   readonly backend = this.storage.backend;
+  /** Writes made offline that haven't reached the cloud backend yet. Always 0 locally. */
+  readonly pendingSyncCount = this.pendingSyncCountSignal.asReadonly();
 
   private refreshInFlight = false;
   private refreshQueued = false;
   private hasLoadedOnce = false;
 
   constructor() {
-    // A cloud backend calls this when the *other* device writes something;
-    // local adapters never fire it.
+    // A cloud backend calls this when the *other* device writes something,
+    // or when our own queued offline writes have just been replayed; local
+    // adapters never fire it.
     this.storage.onRemoteChange(() => void this.refreshFromRemote());
+    this.storage.onPendingSyncChange((count) => this.pendingSyncCountSignal.set(count));
 
     // Local mode is "ready" immediately; cloud mode has to wait for a sign-in
     // that might not happen until after this component tree has already
@@ -115,7 +115,10 @@ export class LedgerStore {
       this.errorSignal.set(null);
     } catch (error) {
       this.statusSignal.set('error');
-      const fallback = this.backend === 'cloud' ? 'Could not reach the cloud database.' : 'Could not open local storage.';
+      const fallback =
+        this.backend === 'cloud'
+          ? 'Could not reach the cloud database.'
+          : 'Could not open local storage.';
       this.errorSignal.set(describe(error, fallback));
     }
   }
