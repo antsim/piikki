@@ -220,6 +220,11 @@ select {
 
 .text-input {
   width: 100%;
+  // Some WebKit builds size the native <input type="date"> control from its
+  // internal (locale-formatted) content rather than the box we ask for, and
+  // that intrinsic size grows past 100% specifically under the dark native
+  // control chrome — max-width clamps it back to the field regardless.
+  max-width: 100%;
   border: 1.5px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface);
