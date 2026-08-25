@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { buildEntries, buildMonthSummary, balanceDeltaCents, listMonths, signedSharePercent, totalBalanceCents } from './ledger';
+import {
+  buildEntries,
+  buildMonthSummary,
+  balanceDeltaCents,
+  ledgerAmountCents,
+  listMonths,
+  sharedAmountCents,
+  signedSharePercent,
+  totalBalanceCents,
+} from './ledger';
 import { DEFAULT_CATEGORIES } from './split-category.model';
-import { Payer, SplitTerms, Transaction } from './transaction.model';
+import { Payer, PersonalAmounts, SplitTerms, Transaction } from './transaction.model';
 
 const HOUSEHOLD: SplitTerms = { kind: 'expense', myShare: 0.6 };
 const EVEN: SplitTerms = { kind: 'expense', myShare: 0.5 };
@@ -14,6 +23,7 @@ function tx(
   payer: Payer,
   split: SplitTerms,
   date = '2026-08-10',
+  personal?: PersonalAmounts,
 ): Transaction {
   const created = `2026-08-10T00:00:${String(sequence++).padStart(2, '0')}.000Z`;
   return {
@@ -24,9 +34,20 @@ function tx(
     payer,
     categoryId: split.kind === 'settlement' ? 'settlement' : 'household',
     split,
+    personal,
     createdAt: created,
     updatedAt: created,
   };
+}
+
+/** A receipt with personal items on it, at the default test date. */
+function receipt(
+  amountCents: number,
+  payer: Payer,
+  split: SplitTerms,
+  personal: PersonalAmounts,
+): Transaction {
+  return tx(amountCents, payer, split, '2026-08-10', personal);
 }
 
 describe('balanceDeltaCents', () => {
@@ -63,7 +84,70 @@ describe('balanceDeltaCents', () => {
   });
 });
 
+describe('balanceDeltaCents with personal items', () => {
+  // The worked example: a 100 € shop split down the middle, with 20 € of my
+  // own things and 10 € of my partner's in the bag.
+  //   shared 70 -> they owe 35, plus their own 10 in full = 45.
+  const SHOP: PersonalAmounts = { mineCents: 2_000, partnerCents: 1_000 };
+
+  it('splits only what is left after the personal items', () => {
+    expect(sharedAmountCents(receipt(10_000, 'me', EVEN, SHOP))).toBe(7_000);
+  });
+
+  it('charges the partner their share plus their own items when I paid', () => {
+    expect(balanceDeltaCents(receipt(10_000, 'me', EVEN, SHOP))).toBe(4_500);
+  });
+
+  it('charges me my share plus my own items when the partner paid', () => {
+    expect(balanceDeltaCents(receipt(10_000, 'partner', EVEN, SHOP))).toBe(-5_500);
+  });
+
+  it('lets the payer buy their own things without moving the balance for them', () => {
+    // 20 € of my own on a 100 € receipt I paid: my partner owes half of the
+    // remaining 80, not half of the shampoo too.
+    const mineOnly = { mineCents: 2_000, partnerCents: 0 };
+    expect(balanceDeltaCents(receipt(10_000, 'me', EVEN, mineOnly))).toBe(4_000);
+    // Same items on a receipt they paid: I owe my half plus my 20 in full.
+    expect(balanceDeltaCents(receipt(10_000, 'partner', EVEN, mineOnly))).toBe(-6_000);
+  });
+
+  it('hands the whole thing over when nothing on the receipt was shared', () => {
+    const allTheirs = { mineCents: 0, partnerCents: 10_000 };
+    expect(sharedAmountCents(receipt(10_000, 'me', EVEN, allTheirs))).toBe(0);
+    expect(balanceDeltaCents(receipt(10_000, 'me', EVEN, allTheirs))).toBe(10_000);
+  });
+
+  it('still respects an uneven category split on the shared remainder', () => {
+    // 60/40 household: shared 70 -> partner owes 40% = 28, plus their own 10.
+    expect(balanceDeltaCents(receipt(10_000, 'me', HOUSEHOLD, SHOP))).toBe(3_800);
+  });
+
+  it('ignores personal items on a settlement, which is never part-personal', () => {
+    expect(balanceDeltaCents(receipt(25_000, 'partner', SETTLEMENT, SHOP))).toBe(-25_000);
+    expect(sharedAmountCents(receipt(25_000, 'partner', SETTLEMENT, SHOP))).toBe(25_000);
+  });
+});
+
+describe('ledgerAmountCents', () => {
+  it('leaves an ordinary receipt alone', () => {
+    expect(ledgerAmountCents(tx(10_000, 'me', EVEN))).toBe(10_000);
+  });
+
+  it("discounts the payer's own items, which never involved the other person", () => {
+    const shop = { mineCents: 2_000, partnerCents: 1_000 };
+    expect(ledgerAmountCents(receipt(10_000, 'me', EVEN, shop))).toBe(8_000);
+    expect(ledgerAmountCents(receipt(10_000, 'partner', EVEN, shop))).toBe(9_000);
+  });
+});
+
 describe('signedSharePercent', () => {
+  it('shifts the share toward whoever the personal items belong to', () => {
+    // I carry my own 20 plus half of the shared 70 = 55 of the 100 total.
+    const shop = { mineCents: 2_000, partnerCents: 1_000 };
+    expect(signedSharePercent(receipt(10_000, 'me', EVEN, shop))).toBe(55);
+    expect(signedSharePercent(receipt(10_000, 'partner', EVEN, shop))).toBe(-45);
+  });
+
   it('reproduces the percentages from the spreadsheet', () => {
     expect(signedSharePercent(tx(1, 'me', HOUSEHOLD))).toBe(60);
     expect(signedSharePercent(tx(1, 'partner', HOUSEHOLD))).toBe(-40);
@@ -136,6 +220,13 @@ describe('buildMonthSummary', () => {
     expect(september.entries).toHaveLength(0);
     expect(september.openingCents).toBe(10_500);
     expect(september.closingCents).toBe(10_500);
+  });
+
+  it("leaves the payer's own items out of what they paid toward the ledger", () => {
+    const shopping = [receipt(10_000, 'me', EVEN, { mineCents: 2_000, partnerCents: 1_000 })];
+    const august = buildMonthSummary(buildEntries(shopping, DEFAULT_CATEGORIES), '2026-08');
+    // 100 € left my account, but 20 € of it was my own shampoo.
+    expect(august.paidByMeCents).toBe(8_000);
   });
 
   it('counts settlements separately from spending', () => {

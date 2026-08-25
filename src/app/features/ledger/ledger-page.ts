@@ -3,7 +3,7 @@ import { RouterLink } from '@angular/router';
 import { dayLabel, monthLabel } from '../../core/domain/dates';
 import { LedgerEntry } from '../../core/domain/ledger';
 import { OPENING_BALANCE_CATEGORY_ID } from '../../core/domain/split-category.model';
-import { Transaction } from '../../core/domain/transaction.model';
+import { personalAmountsOf, Transaction } from '../../core/domain/transaction.model';
 import { BackupService } from '../../core/backup/backup.service';
 import { MoneyFormatter } from '../../core/format/money-formatter';
 import { ConnectivityStore } from '../../core/state/connectivity-store';
@@ -100,6 +100,15 @@ export class LedgerPage {
 
     const who = payer === 'me' ? myName : partnerName;
     const label = entry.category?.label ?? 'Uncategorised';
-    return `${label} · paid by ${who} · ${this.money.percent(entry.percent)}`;
+    const parts = [label, `paid by ${who}`, this.money.percent(entry.percent)];
+
+    // Without this the row looks like a plain 50/50 whose percentage is wrong.
+    const personal = personalAmountsOf(entry.transaction);
+    const personalCents = personal.mineCents + personal.partnerCents;
+    if (personalCents > 0) {
+      parts.push(`${this.money.format(personalCents)} personal`);
+    }
+
+    return parts.join(' · ');
   }
 }

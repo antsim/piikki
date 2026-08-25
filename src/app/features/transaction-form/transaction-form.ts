@@ -11,7 +11,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { todayIso } from '../../core/domain/dates';
-import { balanceDeltaCents, signedSharePercent } from '../../core/domain/ledger';
+import { BalanceInput, balanceDeltaCents, signedSharePercent } from '../../core/domain/ledger';
 import { centsToInputValue, parseAmountToCents } from '../../core/domain/money';
 import { OPENING_BALANCE_CATEGORY_ID, SplitCategory } from '../../core/domain/split-category.model';
 import { Payer, Transaction, TransactionDraft } from '../../core/domain/transaction.model';
@@ -66,6 +66,10 @@ export class TransactionForm {
   protected readonly date = signal(todayIso());
   protected readonly categoryId = signal('');
   protected readonly payer = signal<Payer>('me');
+  protected readonly personalMineText = signal('');
+  protected readonly personalPartnerText = signal('');
+  /** Collapsed until asked for, so the common all-shared receipt stays a short form. */
+  protected readonly personalOpen = signal(false);
 
   protected readonly editing = computed(() => this.request().transaction !== undefined);
   protected readonly isSettlement = computed(() => this.category()?.kind === 'settlement');
@@ -73,7 +77,38 @@ export class TransactionForm {
     () => this.category()?.id === OPENING_BALANCE_CATEGORY_ID,
   );
   protected readonly amountCents = computed(() => parseAmountToCents(this.amountText()) ?? 0);
-  protected readonly valid = computed(() => this.amountCents() > 0 && !!this.category());
+
+  /** Splitting part of a receipt off only makes sense for a shared cost. */
+  protected readonly supportsPersonal = computed(() => this.category()?.kind === 'expense');
+
+  protected readonly personalMineCents = computed(() => positiveCents(this.personalMineText()));
+  protected readonly personalPartnerCents = computed(() =>
+    positiveCents(this.personalPartnerText()),
+  );
+  protected readonly personalTotalCents = computed(
+    () => this.personalMineCents() + this.personalPartnerCents(),
+  );
+  protected readonly hasPersonal = computed(
+    () => this.supportsPersonal() && this.personalTotalCents() > 0,
+  );
+  protected readonly sharedCents = computed(() =>
+    Math.max(0, this.amountCents() - (this.hasPersonal() ? this.personalTotalCents() : 0)),
+  );
+  /** Blocks the save rather than silently clamping something the user can still see and fix. */
+  protected readonly personalExceedsAmount = computed(
+    () => this.hasPersonal() && this.personalTotalCents() > this.amountCents(),
+  );
+
+  /** What gets saved, and what the live preview below does its arithmetic on. */
+  private readonly personalDraft = computed(() =>
+    this.hasPersonal()
+      ? { mineCents: this.personalMineCents(), partnerCents: this.personalPartnerCents() }
+      : undefined,
+  );
+
+  protected readonly valid = computed(
+    () => this.amountCents() > 0 && !!this.category() && !this.personalExceedsAmount(),
+  );
 
   protected readonly category = computed<SplitCategory | undefined>(() =>
     this.categories().find((item) => item.id === this.categoryId()),
@@ -85,21 +120,12 @@ export class TransactionForm {
     if (!category) {
       return 0;
     }
-    return balanceDeltaCents({
-      amountCents: this.amountCents(),
-      payer: this.payer(),
-      split: { kind: category.kind, myShare: category.myShare },
-    });
+    return balanceDeltaCents(this.balanceInput(category));
   });
 
   protected readonly percent = computed(() => {
     const category = this.category();
-    return category
-      ? signedSharePercent({
-          payer: this.payer(),
-          split: { kind: category.kind, myShare: category.myShare },
-        })
-      : 0;
+    return category ? signedSharePercent(this.balanceInput(category)) : 0;
   });
 
   /** Balance after saving, so the number in the hero card is never a surprise. */
@@ -116,6 +142,16 @@ export class TransactionForm {
       this.reset(this.request());
       this.dialog().nativeElement.showModal();
     });
+  }
+
+  /** The half-filled form, in the shape the accounting rule takes. */
+  private balanceInput(category: SplitCategory): BalanceInput {
+    return {
+      amountCents: this.amountCents(),
+      payer: this.payer(),
+      split: { kind: category.kind, myShare: category.myShare },
+      personal: this.personalDraft(),
+    };
   }
 
   protected close(): void {
@@ -140,6 +176,7 @@ export class TransactionForm {
       payer: this.payer(),
       categoryId: category.id,
       split: { kind: category.kind, myShare: category.myShare },
+      personal: this.personalDraft(),
     };
 
     const existing = this.request().transaction;
@@ -193,5 +230,19 @@ export class TransactionForm {
     this.date.set(source?.date ?? todayIso());
     this.categoryId.set(source?.categoryId ?? fallbackCategory?.id ?? '');
     this.payer.set(source?.payer ?? 'me');
+
+    const personal = source?.personal;
+    this.personalMineText.set(personal?.mineCents ? centsToInputValue(personal.mineCents) : '');
+    this.personalPartnerText.set(
+      personal?.partnerCents ? centsToInputValue(personal.partnerCents) : '',
+    );
+    // Reopening a receipt that has personal items should show them, not hide
+    // them behind a disclosure the user has to remember to open.
+    this.personalOpen.set(!!personal);
   }
+}
+
+/** Blank, unparseable and negative input all mean "nothing personal here". */
+function positiveCents(text: string): number {
+  return Math.max(0, parseAmountToCents(text) ?? 0);
 }

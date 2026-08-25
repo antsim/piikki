@@ -5,7 +5,11 @@ import { buildEntries, buildMonthSummary, listMonths, totalBalanceCents } from '
 import { DEFAULT_SETTINGS, LedgerSettings } from '../domain/settings.model';
 import { LedgerSnapshot } from '../domain/snapshot.model';
 import { OPENING_BALANCE_CATEGORY_ID, SplitCategory } from '../domain/split-category.model';
-import { Transaction, TransactionDraft } from '../domain/transaction.model';
+import {
+  normalisePersonalAmounts,
+  Transaction,
+  TransactionDraft,
+} from '../domain/transaction.model';
 import { LedgerStorage } from '../storage/ledger-storage';
 
 export type LedgerStatus = 'loading' | 'ready' | 'error';
@@ -125,10 +129,12 @@ export class LedgerStore {
 
   async addTransaction(draft: TransactionDraft): Promise<Transaction> {
     const now = new Date().toISOString();
+    const amountCents = Math.round(Math.abs(draft.amountCents));
     const transaction: Transaction = {
       ...draft,
       description: draft.description.trim(),
-      amountCents: Math.round(Math.abs(draft.amountCents)),
+      amountCents,
+      personal: normalisePersonalAmounts(draft.personal, amountCents),
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -146,11 +152,15 @@ export class LedgerStore {
     if (!existing) {
       return;
     }
+    const amountCents = Math.round(Math.abs(draft.amountCents));
     const updated: Transaction = {
       ...existing,
       ...draft,
       description: draft.description.trim(),
-      amountCents: Math.round(Math.abs(draft.amountCents)),
+      amountCents,
+      // Set explicitly rather than left to the spread: clearing every personal
+      // item has to actually drop the old ones, not inherit them from `existing`.
+      personal: normalisePersonalAmounts(draft.personal, amountCents),
       updatedAt: new Date().toISOString(),
     };
     await this.persist(

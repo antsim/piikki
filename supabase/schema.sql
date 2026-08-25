@@ -32,6 +32,19 @@ create table if not exists transactions (
   updated_at timestamptz not null default now()
 );
 
+-- Personal items: the parts of a receipt that belong to one of you alone and
+-- are never split. Added after the first release, so they go on as a separate
+-- statement rather than in the create above — that way re-running this file on
+-- an existing project picks them up. The app can *read* a table without these
+-- columns (it treats them as zero), but writing needs them, so run this before
+-- using the feature.
+alter table transactions
+  add column if not exists personal_mine_cents integer not null default 0
+    check (personal_mine_cents >= 0);
+alter table transactions
+  add column if not exists personal_partner_cents integer not null default 0
+    check (personal_partner_cents >= 0);
+
 create index if not exists transactions_date_idx on transactions (date);
 
 -- Single-row settings table: names, currency, split-rule catalogue.

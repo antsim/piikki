@@ -33,6 +33,29 @@ describe('transaction row mapping', () => {
     expect(rowToTransaction(row).note).toBeUndefined();
   });
 
+  it('round-trips personal items', () => {
+    const withPersonal: Transaction = {
+      ...TRANSACTION,
+      personal: { mineCents: 2_000, partnerCents: 1_000 },
+    };
+    const row = transactionToRow(withPersonal);
+    expect(row.personal_mine_cents).toBe(2_000);
+    expect(row.personal_partner_cents).toBe(1_000);
+    expect(rowToTransaction(row)).toEqual(withPersonal);
+  });
+
+  it('reads a row from a table without the personal columns as nothing personal', () => {
+    // A project that has not re-run schema.sql yet still has to load.
+    const { personal_mine_cents, personal_partner_cents, ...legacy } =
+      transactionToRow(TRANSACTION);
+    expect(rowToTransaction(legacy).personal).toBeUndefined();
+  });
+
+  it('clamps personal amounts that do not fit the row amount', () => {
+    const row = { ...transactionToRow(TRANSACTION), personal_mine_cents: 99_000 };
+    expect(rowToTransaction(row).personal).toEqual({ mineCents: 10_000, partnerCents: 0 });
+  });
+
   it('rejects a row with a bad payer or date', () => {
     expect(() => rowToTransaction({ ...transactionToRow(TRANSACTION), payer: 'someone' })).toThrow();
     expect(() => rowToTransaction({ ...transactionToRow(TRANSACTION), date: 'not-a-date' })).toThrow();

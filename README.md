@@ -41,6 +41,45 @@ Split rules are **snapshotted onto each transaction when it is saved**. Changing
 "Household" from 60 % to 55 % later affects new entries only; history never
 silently rewrites itself.
 
+## Personal items on a shared receipt
+
+Most of a supermarket run is shared, but some of it isn't — a bottle of
+shampoo that's only yours, a magazine that's only theirs. In the add form,
+**+ Personal items (not shared)** opens two boxes, one per person, for the
+parts of that receipt that belong to one of you alone.
+
+They come off the total before the split is applied, and then land in full on
+whoever they belong to. One rule covers both directions:
+
+- **The payer's own items** move the balance not at all — they bought their
+  own thing with their own money. They just stop the other person from being
+  charged half of it.
+- **The other person's items** are owed back at 100 %, on top of their share
+  of everything else.
+
+A 100 € shop split 50/50, paid by you, with 20 € of your own things and 10 €
+of your partner's in the bag:
+
+| | |
+| --- | --- |
+| Receipt total | 100,00 € |
+| Your own | − 20,00 € |
+| Their own | − 10,00 € |
+| **Shared** | **70,00 €** |
+| Balance change | **+45,00 €** — their half of the 70, plus their 10 in full |
+
+The live preview in the form shows exactly that breakdown as you type, so the
+number is never a surprise. The receipt stays **one row** in the ledger, at
+its real total, and reopening it shows the personal amounts again, ready to
+edit. Rows carrying personal items say so under the description.
+
+One consequence worth knowing: the month's **"Paid by"** totals leave out your
+own personal items, since that money never involved the other person. Buying
+your own shampoo on a shared receipt doesn't inflate your side of them.
+
+Personal items apply to shared costs only — a settlement is never
+part-personal, so the section is hidden for those.
+
 ## Moving from a spreadsheet: setting the starting balance
 
 A fresh install always starts at €0.00 — the balance is just the sum of every
@@ -133,7 +172,10 @@ no public sign-up.
 1. Create a free project at [supabase.com](https://supabase.com).
 2. Open the SQL editor and run [`supabase/schema.sql`](supabase/schema.sql) —
    it creates the `transactions` and `settings` tables and locks them to
-   signed-in users. Safe to re-run.
+   signed-in users. Safe to re-run — **and worth re-running after an update**,
+   since that's how later columns get added to a project you set up earlier.
+   (Personal items need the two `personal_*_cents` columns it adds; the app
+   reads a table without them fine, but saving needs them.)
 3. Create the two accounts: **Authentication → Users → Add user**, once for
    each of you, with an email and password. Check **Auto Confirm User** so
    there's no email-verification link to click — you're creating these
