@@ -28,13 +28,15 @@ export const appConfig: ApplicationConfig = {
     // `runInInjectionContext` using an injector captured up front.
     //
     // LedgerStore itself is always constructed (cheap: it only wires up its
-    // storage subscription and an auth-gated effect — see its constructor),
-    // but its data is only awaited here when we already know it's safe to
-    // read: local mode, or cloud mode with an existing signed-in session.
-    // Cloud mode with no session yet renders straight to a login screen
-    // instead of blocking on data nothing is authorized to return; once
-    // sign-in succeeds, LedgerStore's own effect notices the gate open and
-    // loads reactively.
+    // storage subscription and an auth-gated effect — see its constructor).
+    // Its data load is started here but deliberately *not* awaited: an app
+    // initializer blocks the first render, so awaiting the database query
+    // left the user staring at a blank page for the whole round trip. The
+    // shell renders immediately instead and shows a loading state (or the
+    // cached ledger, in cloud mode) until LedgerStore.status() is 'ready'.
+    // Cloud mode with no session yet renders straight to a login screen;
+    // once sign-in succeeds, LedgerStore's own effect notices the gate open
+    // and loads reactively.
     provideAppInitializer(() => {
       const injector = inject(Injector);
       const configStore = inject(AppConfigStore);
@@ -50,7 +52,7 @@ export const appConfig: ApplicationConfig = {
 
         const ledgerStore = runInInjectionContext(injector, () => inject(LedgerStore));
         if (authStore.readyToLoad()) {
-          await ledgerStore.load();
+          void ledgerStore.load();
         }
       })();
     }),

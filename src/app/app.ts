@@ -4,11 +4,12 @@ import { AuthStore } from './core/auth/auth.store';
 import { AppConfigStore } from './core/config/app-config.store';
 import { LedgerStore } from './core/state/ledger-store';
 import { LoginCard } from './features/auth/login-card';
+import { LoadingScreen } from './shared/ui/loading-screen';
 import { ToastHost } from './shared/ui/toast-host';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, ToastHost, LoginCard],
+  imports: [RouterOutlet, RouterLink, ToastHost, LoginCard, LoadingScreen],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './app.html',
   styleUrl: './app.scss',

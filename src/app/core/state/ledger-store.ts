@@ -10,7 +10,7 @@ import {
   Transaction,
   TransactionDraft,
 } from '../domain/transaction.model';
-import { LedgerStorage } from '../storage/ledger-storage';
+import { LedgerStorage, PersistedLedger } from '../storage/ledger-storage';
 
 export type LedgerStatus = 'loading' | 'ready' | 'error';
 
@@ -31,6 +31,7 @@ export class LedgerStore {
   private readonly statusSignal = signal<LedgerStatus>('loading');
   private readonly errorSignal = signal<string | null>(null);
   private readonly pendingSyncCountSignal = signal(0);
+  private readonly refreshingSignal = signal(false);
 
   /** Which month the ledger view is showing. */
   readonly selectedMonth = signal<MonthKey>(currentMonthKey());
@@ -45,10 +46,26 @@ export class LedgerStore {
   readonly backend = this.storage.backend;
   /** Writes made offline that haven't reached the cloud backend yet. Always 0 locally. */
   readonly pendingSyncCount = this.pendingSyncCountSignal.asReadonly();
+  /**
+   * True while the startup load is fetching fresh data in the background
+   * behind already-visible cached data. The UI shows a small, non-blocking
+   * hint for it; `status` stays 'ready' throughout.
+   */
+  readonly refreshing = this.refreshingSignal.asReadonly();
 
   private refreshInFlight = false;
   private refreshQueued = false;
   private hasLoadedOnce = false;
+
+  /**
+   * Bookkeeping for the race between a background fetch and the user's own
+   * writes: a fetch that was issued before a write reached the backend
+   * returns data without that write, and applying it would make the
+   * optimistic change briefly vanish. See fetchFresh().
+   */
+  private writesInFlight = 0;
+  private writeEpoch = 0;
+  private refreshAfterWrites = false;
 
   constructor() {
     // A cloud backend calls this when the *other* device writes something,
@@ -108,22 +125,97 @@ export class LedgerStore {
     return [...seen].slice(0, 40);
   });
 
+  /**
+   * Stale-while-revalidate: if the adapter has a cached copy (cloud mode's
+   * IndexedDB snapshot), show it straight away and mark the store ready, then
+   * fetch the fresh copy in the background and swap it in. Without a cache
+   * (first visit on a device, or local mode where load() is already local)
+   * the status stays 'loading' until the real load finishes.
+   */
   async load(): Promise<void> {
     this.hasLoadedOnce = true;
-    this.statusSignal.set('loading');
+    const showedCache = await this.showCached();
+    if (!showedCache) {
+      this.statusSignal.set('loading');
+    }
+    this.refreshingSignal.set(showedCache);
     try {
-      const { transactions, settings } = await this.storage.load();
-      this.transactionsSignal.set(transactions);
-      this.settingsSignal.set(settings ? mergeSettings(settings) : DEFAULT_SETTINGS);
+      const fresh = await this.fetchFresh();
+      if (fresh) {
+        this.applyLoaded(fresh);
+      } else {
+        this.requestRefresh();
+      }
       this.statusSignal.set('ready');
       this.errorSignal.set(null);
     } catch (error) {
-      this.statusSignal.set('error');
+      if (!showedCache) {
+        this.statusSignal.set('error');
+      }
       const fallback =
         this.backend === 'cloud'
           ? 'Could not reach the cloud database.'
           : 'Could not open local storage.';
       this.errorSignal.set(describe(error, fallback));
+    } finally {
+      this.refreshingSignal.set(false);
+    }
+  }
+
+  private async showCached(): Promise<boolean> {
+    let cached: PersistedLedger | null = null;
+    try {
+      cached = await this.storage.loadCached();
+    } catch {
+      // A broken cache only costs us the fast path; the real load follows.
+    }
+    if (!cached || this.statusSignal() === 'ready') {
+      return false;
+    }
+    this.applyLoaded(cached);
+    this.statusSignal.set('ready');
+    return true;
+  }
+
+  private applyLoaded({ transactions, settings }: PersistedLedger): void {
+    this.transactionsSignal.set(transactions);
+    this.settingsSignal.set(settings ? mergeSettings(settings) : DEFAULT_SETTINGS);
+  }
+
+  /**
+   * storage.load(), but resolves to null when one of our own writes overlapped
+   * the fetch — the result may predate that write, so applying it would undo
+   * the optimistic update on screen. Callers then ask for another refresh
+   * once the writes have settled (requestRefresh()).
+   */
+  private async fetchFresh(): Promise<PersistedLedger | null> {
+    const epoch = this.writeEpoch;
+    const busyAtStart = this.writesInFlight > 0;
+    const result = await this.storage.load();
+    const overlapped = busyAtStart || this.writesInFlight > 0 || epoch !== this.writeEpoch;
+    return overlapped ? null : result;
+  }
+
+  private requestRefresh(): void {
+    if (this.writesInFlight > 0) {
+      this.refreshAfterWrites = true;
+    } else {
+      void this.refreshFromRemote();
+    }
+  }
+
+  /** Runs a storage write while recording it for fetchFresh()'s overlap check. */
+  private async trackWrite<T>(write: () => Promise<T>): Promise<T> {
+    this.writesInFlight++;
+    try {
+      return await write();
+    } finally {
+      this.writesInFlight--;
+      this.writeEpoch++;
+      if (this.writesInFlight === 0 && this.refreshAfterWrites) {
+        this.refreshAfterWrites = false;
+        void this.refreshFromRemote();
+      }
     }
   }
 
@@ -192,7 +284,7 @@ export class LedgerStore {
     const previous = this.settingsSignal();
     this.settingsSignal.set(next);
     try {
-      await this.storage.putSettings(next);
+      await this.trackWrite(() => this.storage.putSettings(next));
     } catch (error) {
       this.settingsSignal.set(previous);
       this.errorSignal.set(describe(error, 'Could not save settings.'));
@@ -217,7 +309,7 @@ export class LedgerStore {
     this.transactionsSignal.set(snapshot.transactions);
     this.settingsSignal.set(settings);
     try {
-      await this.storage.replaceAll(snapshot.transactions, settings);
+      await this.trackWrite(() => this.storage.replaceAll(snapshot.transactions, settings));
     } catch (error) {
       this.transactionsSignal.set(previousTransactions);
       this.settingsSignal.set(previousSettings);
@@ -232,7 +324,7 @@ export class LedgerStore {
     const previous = this.transactionsSignal();
     this.transactionsSignal.set([]);
     try {
-      await this.storage.replaceAll([], settings);
+      await this.trackWrite(() => this.storage.replaceAll([], settings));
     } catch (error) {
       this.transactionsSignal.set(previous);
       this.errorSignal.set(describe(error, 'Could not clear the ledger.'));
@@ -255,10 +347,15 @@ export class LedgerStore {
     try {
       do {
         this.refreshQueued = false;
-        const { transactions, settings } = await this.storage.load();
-        this.transactionsSignal.set(transactions);
-        if (settings) {
-          this.settingsSignal.set(mergeSettings(settings));
+        const fresh = await this.fetchFresh();
+        if (!fresh) {
+          // Sets refreshQueued (loop again) or defers until writes settle.
+          this.requestRefresh();
+          continue;
+        }
+        this.transactionsSignal.set(fresh.transactions);
+        if (fresh.settings) {
+          this.settingsSignal.set(mergeSettings(fresh.settings));
         }
       } while (this.refreshQueued);
     } catch {
@@ -284,7 +381,7 @@ export class LedgerStore {
     const previous = this.transactionsSignal();
     this.transactionsSignal.set(apply(previous));
     try {
-      await write();
+      await this.trackWrite(write);
       this.errorSignal.set(null);
     } catch (error) {
       this.transactionsSignal.set(previous);
