@@ -20,6 +20,17 @@ export abstract class LedgerStorage {
   abstract readonly backend: StorageBackend;
 
   abstract load(): Promise<PersistedLedger>;
+
+  /**
+   * A possibly stale copy of the ledger that can be read without a network
+   * round trip, or null when there is none. Lets the UI paint the last known
+   * data instantly on startup while `load()` fetches the fresh copy in the
+   * background. Adapters whose `load()` is already local return null — there
+   * is nothing faster to fall back to.
+   */
+  async loadCached(): Promise<PersistedLedger | null> {
+    return null;
+  }
   abstract putTransaction(transaction: Transaction): Promise<void>;
   abstract deleteTransaction(id: string): Promise<void>;
   abstract putSettings(settings: LedgerSettings): Promise<void>;

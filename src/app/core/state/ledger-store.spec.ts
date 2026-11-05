@@ -5,7 +5,7 @@ import { AuthStore } from '../auth/auth.store';
 import { OPENING_BALANCE_CATEGORY_ID, SETTLEMENT_CATEGORY_ID } from '../domain/split-category.model';
 import { Transaction, TransactionDraft } from '../domain/transaction.model';
 import { InMemoryLedgerStorage } from '../storage/in-memory-ledger-storage';
-import { LedgerStorage } from '../storage/ledger-storage';
+import { LedgerStorage, PersistedLedger } from '../storage/ledger-storage';
 import { LedgerStore } from './ledger-store';
 
 function draft(overrides: Partial<TransactionDraft> = {}): TransactionDraft {
@@ -188,5 +188,103 @@ describe('LedgerStore auth gating', () => {
 
     expect(store.status()).toBe('ready');
     expect(store.transactions()).toHaveLength(1);
+  });
+});
+
+/** In-memory storage whose load() waits until the test releases it, plus a cached copy. */
+class SlowCachedStorage extends InMemoryLedgerStorage {
+  cached: PersistedLedger | null = null;
+  private releaseLoad: (() => void) | null = null;
+
+  release(): void {
+    this.releaseLoad?.();
+  }
+
+  override async loadCached(): Promise<PersistedLedger | null> {
+    return this.cached;
+  }
+
+  /** Takes its snapshot right away (like a query hitting the server), answers on release(). */
+  override async load(): Promise<PersistedLedger> {
+    const snapshot = await super.load();
+    await new Promise<void>((resolve) => (this.releaseLoad = resolve));
+    return snapshot;
+  }
+}
+
+function flush(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve));
+}
+
+function storedTransaction(id: string, description: string): Transaction {
+  return {
+    id,
+    date: '2026-08-10',
+    description,
+    amountCents: 10_000,
+    payer: 'me',
+    categoryId: 'household',
+    split: { kind: 'expense', myShare: 0.6 },
+    createdAt: '2026-08-10T00:00:00.000Z',
+    updatedAt: '2026-08-10T00:00:00.000Z',
+  };
+}
+
+describe('LedgerStore startup loading', () => {
+  let storage: SlowCachedStorage;
+  let store: LedgerStore;
+
+  beforeEach(() => {
+    storage = new SlowCachedStorage();
+    TestBed.configureTestingModule({
+      providers: [{ provide: LedgerStorage, useValue: storage }],
+    });
+    store = TestBed.inject(LedgerStore);
+  });
+
+  it('stays in the loading state until the first load finishes when there is no cache', async () => {
+    const loading = store.load();
+    await flush();
+    expect(store.status()).toBe('loading');
+    expect(store.refreshing()).toBe(false);
+
+    storage.release();
+    await loading;
+    expect(store.status()).toBe('ready');
+  });
+
+  it('shows cached data immediately and swaps in the fresh copy when it arrives', async () => {
+    storage.cached = { transactions: [storedTransaction('old', 'Cached')], settings: null };
+    await storage.putTransaction(storedTransaction('new', 'Fresh'));
+
+    const loading = store.load();
+    await flush();
+    expect(store.status()).toBe('ready');
+    expect(store.refreshing()).toBe(true);
+    expect(store.transactions().map((t) => t.description)).toEqual(['Cached']);
+
+    storage.release();
+    await loading;
+    expect(store.refreshing()).toBe(false);
+    expect(store.transactions().map((t) => t.description)).toEqual(['Fresh']);
+  });
+
+  it('does not let a fetch that started before a write wipe out that write', async () => {
+    storage.cached = { transactions: [], settings: null };
+    const loading = store.load();
+    await flush();
+
+    // The user adds something while the background fetch is still in flight;
+    // the fetch's snapshot was taken before this write existed.
+    await store.addTransaction(draft({ description: 'Added while syncing' }));
+    storage.release();
+    await loading;
+    expect(store.transactions().map((t) => t.description)).toEqual(['Added while syncing']);
+
+    // The stale result is dropped in favour of a follow-up fetch, which does see the write.
+    await flush();
+    storage.release();
+    await flush();
+    expect(store.transactions().map((t) => t.description)).toEqual(['Added while syncing']);
   });
 });

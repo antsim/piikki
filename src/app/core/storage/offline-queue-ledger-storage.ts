@@ -60,6 +60,17 @@ export class OfflineQueueLedgerStorage extends LedgerStorage {
     }
   }
 
+  /**
+   * The last successfully loaded snapshot (with our own unsynced writes on
+   * top), straight from IndexedDB — no network. LedgerStore shows this
+   * immediately on startup and swaps in `load()`'s fresh result when it
+   * arrives, so opening the app doesn't wait on Supabase.
+   */
+  override async loadCached(): Promise<PersistedLedger | null> {
+    const cached = await this.store.readCache();
+    return cached ? this.withPending(cached) : null;
+  }
+
   async putTransaction(transaction: Transaction): Promise<void> {
     await this.write(() => this.inner.putTransaction(transaction), {
       kind: 'putTransaction',

@@ -3,7 +3,15 @@
 } @else {
   <div class="shell">
     <header class="topbar">
-      <a class="topbar__brand" routerLink="/">piikki</a>
+      <span class="topbar__start">
+        <a class="topbar__brand" routerLink="/">piikki</a>
+        @if (store.refreshing()) {
+          <span class="topbar__sync" role="status">
+            <span class="topbar__sync-dot" aria-hidden="true"></span>
+            Syncing…
+          </span>
+        }
+      </span>
       <a class="topbar__link" routerLink="/settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
           <path
@@ -45,7 +53,11 @@
     }
 
     <main class="shell__main">
-      <router-outlet />
+      @if (store.status() === 'loading') {
+        <app-loading-screen />
+      } @else {
+        <router-outlet />
+      }
     </main>
   </div>
 }
